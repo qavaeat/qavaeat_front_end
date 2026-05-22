@@ -1,16 +1,15 @@
-// src/app/(user)/layout.tsx
-import { Providers } from "@/components/user/Providers";
+import { PlanProvider } from "@/context/PlanContext";
 import { UserNav } from "@/components/user/UserNav";
 
-export default function UserLayout({
+export default async function UserLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <Providers>
+    <PlanProvider>
       <UserNav />
-      <main>{children}</main>
-    </Providers>
+      {children}
+    </PlanProvider>
   );
 }

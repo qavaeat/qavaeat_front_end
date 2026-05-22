@@ -135,7 +135,7 @@ function SortDropdown({
   setOpen: (v: boolean) => void;
 }) {
   const [pos, setPos] = useState({ top: 0, right: 0 });
-  const [mounted, setMounted] = useState(false);
+  const [mounted] = useState(true);
 
   const OPTIONS: SortOption[] = [
     "Most Popular",
@@ -144,7 +144,7 @@ function SortDropdown({
     "Newest",
   ];
 
-  useEffect(() => { setMounted(true); }, []);
+ 
 
   useEffect(() => {
     if (open && triggerRef.current) {

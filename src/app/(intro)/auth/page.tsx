@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Mail,
@@ -12,10 +13,12 @@ import {
   UtensilsCrossed,
   AlertCircle,
 } from "lucide-react";
-import { useSignUp, useSignIn } from "@clerk/nextjs";
+import { useClerk } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
+import { api, ApiError } from "@/lib/api";
+import { toastSuccess, toastInfo } from "@/lib/toast";
+import { useSignIn, useSignUp } from "@clerk/nextjs";
 
 // ── Fade-up helper ─────────────────────────────────────
 const fadeUp = (delay: number) => ({
@@ -143,25 +146,70 @@ function OAuthButton({
   );
 }
 
+// ── Auth response shape ────────────────────────────────
+interface AuthResponse {
+  success: boolean;
+  message: string;
+  isNewUser: boolean;
+  user: { id: string; email: string; role: string; provider: string };
+}
+
+// ── Wrap in Suspense because useSearchParams needs it ─
 export default function AuthPage() {
+  return (
+    <Suspense fallback={null}>
+      <AuthPageInner />
+    </Suspense>
+  );
+}
+
+function resolveDestination(returnTo: string | null, role: string): string {
+  if (typeof window !== "undefined") {
+    // Explicit redirect wins first
+    const storedReturnTo = sessionStorage.getItem("returnTo");
+    sessionStorage.removeItem("returnTo");
+
+    const destination = returnTo ?? storedReturnTo;
+    if (destination) return decodeURIComponent(destination);
+
+    // Fall back to where the user actually was before closing the tab
+    const lastRoute = sessionStorage.getItem("lastRoute");
+    sessionStorage.removeItem("lastRoute");
+    if (lastRoute && lastRoute !== "/auth") return lastRoute;
+  }
+
+  // Role-based default
+  switch (role) {
+    case "CHEF":
+      return "/chef/dashboard";
+    case "SUPERADMIN":
+      return "/admin/chefs";
+    default:
+      return "/discover";
+  }
+}
+
+function AuthPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Clerk hooks — used ONLY for OAuth, not manual auth
-  const { signUp } = useSignUp();
-  const { signIn } = useSignIn();
+  const returnTo = searchParams.get("returnTo");
 
-  const [mode, setMode] = useState<"signup" | "signin">("signup");
+  const clerk = useClerk();
+
+  const [mode, setMode] = useState<"signup" | "signin">("signin");
   const [form, setForm] = useState({ email: "", password: "" });
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
   const [serverError, setServerError] = useState("");
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
 
-  // Clear field error on change + update value
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
-    // Clear that field's error as user types
     setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
     setServerError("");
   };
@@ -173,108 +221,80 @@ export default function AuthPage() {
     setForm({ email: "", password: "" });
   };
 
-  // ──────────────────────────────────────────────────────
-  // MANUAL SIGN-UP → backend
-  // ──────────────────────────────────────────────────────
-  const handleManualSignUp = async () => {
-    router.push("/select")
-    // const errors = validate("signup", form);
-    // if (Object.keys(errors).length > 0) {
-    //   setFieldErrors(errors);
-    //   return;
-    // }
-    // setLoading(true);
-    // setServerError("");
-    // try {
-    //   const res = await fetch(
-    //     `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
-    //     {
-    //       method: "POST",
-    //       headers: { "Content-Type": "application/json" },
-    //       body: JSON.stringify({
-    //         email: form.email,
-    //         password: form.password,
-    //       }),
-    //     }
-    //   );
-    //   const data = await res.json();
-    //   if (!res.ok) {
-    //     setServerError(data?.message ?? "Registration failed. Please try again.");
-    //     return;
-    //   }
-    // Store token if your backend returns one:
-    // localStorage.setItem("token", data.token);
-    //   toast.success("Account created!", { description: "Welcome to Qavaeat." });
-    //   router.replace("/");
-    // } catch {
-    //   setServerError("Could not connect to the server. Please try again.");
-    // } finally {
-    //   setLoading(false);
-    // }
-  };
+  function redirectAfterLogin(role: string) {
+    router.replace(resolveDestination(returnTo, role));
+  }
 
-  // ──────────────────────────────────────────────────────
-  // MANUAL SIGN-IN →  backend
-  // ──────────────────────────────────────────────────────
-  const handleManualSignIn = async () => {
-    // const errors = validate("signin", form);
-    // if (Object.keys(errors).length > 0) {
-    //   setFieldErrors(errors);
-    //   return;
-    // }
+  // ── Manual sign-up / sign-in — same endpoint ──────────
+  const handleSubmit = async () => {
+    const errors = validate(mode, form);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
 
-    // setLoading(true);
-    // setServerError("");
+    setLoading(true);
+    setServerError("");
 
-    // try {
-    //   const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
-    //     method: "POST",
-    //     headers: { "Content-Type": "application/json" },
-    //     body: JSON.stringify({
-    //       email: form.email,
-    //       password: form.password,
-    //     }),
-    //   });
-
-    //   const data = await res.json();
-
-    //   if (!res.ok) {
-    //     setServerError(data?.message ?? "Invalid email or password.");
-    //     return;
-    //   }
-
-      // Store token:
-      // localStorage.setItem("token", data.token);
-
-    //   toast.success("Welcome back!", {
-    //     description: "You have been signed in.",
-    //   });
-    //   router.replace("/");
-    // } catch {
-    //   setServerError("Could not connect to the server. Please try again.");
-    // } finally {
-    //   setLoading(false);
-    // }
-  };
-
-  // ──────────────────────────────────────────────────────
-  // CLERK OAUTH — Google / Apple only
-  // ──────────────────────────────────────────────────────
-  const handleOAuth = async (strategy: "oauth_google" | "oauth_apple") => {
-    const client = mode === "signup" ? signUp : signIn;
-    if (!client) return;
     try {
-      // await client.authenticateWithRedirect({
-      //   strategy,
-      //   redirectUrl: "/sso-callback",
-      //   redirectUrlComplete: "/",
-      // });
+      const data = await api.authPost<AuthResponse>("/auth/login", {
+        email: form.email,
+        password: form.password,
+      });
+
+      toastSuccess(
+        mode === "signup" ? "Account created!" : "Welcome back!",
+        mode === "signup" ? "Welcome to Qavaeat." : "You have been signed in.",
+      );
+
+      redirectAfterLogin(data.user.role);
     } catch (err) {
-      console.error("OAuth error:", err);
-      toast.error("OAuth sign in failed. Please try again.");
+      setServerError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not connect to the server. Please try again.",
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
+const handleOAuth = async (strategy: "oauth_google" | "oauth_apple") => {
+  if (strategy === "oauth_apple") {
+    toastInfo("Apple sign-in coming soon.");
+    return;
+  }
+
+  setOauthLoading(true);
+  setServerError("");
+
+  try {
+    
+    const { error } = await signIn.sso({
+      strategy,
+      redirectCallbackUrl: "/sso-callback", 
+      redirectUrl: "/sso-callback",          
+    });
+
+    if (error) {
+      setServerError(error.message ?? "OAuth sign in failed.");
+      setOauthLoading(false);
+    }
+  } catch (err) {
+    setServerError(
+      err instanceof Error ? err.message : "OAuth failed. Please try again.",
+    );
+    setOauthLoading(false);
+  }
+};
+
+  // ── Password strength ──────────────────────────────────
+  const strengthChecks = [
+    form.password.length >= 6,
+    /[A-Z]/.test(form.password),
+    /[0-9]/.test(form.password),
+  ];
+  const strengthCount = strengthChecks.filter(Boolean).length;
 
   return (
     <div className="relative w-full min-h-screen flex items-center justify-center px-4 py-12 sm:py-16">
@@ -328,6 +348,26 @@ export default function AuthPage() {
               <UtensilsCrossed className="w-7 h-7 sm:w-9 sm:h-9 text-primary" />
             </motion.div>
 
+            {/* ── Mode toggle tabs ── */}
+            <motion.div
+              {...fadeUp(0.12)}
+              className="flex rounded-full border border-border/40 bg-background/40 backdrop-blur-sm p-1 mb-4 gap-1"
+            >
+              {(["signin", "signup"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => switchMode(m)}
+                  className={`px-5 py-2 rounded-full text-sm font-bold transition-all duration-200 ${
+                    mode === m
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground/60 hover:text-foreground"
+                  }`}
+                >
+                  {m === "signin" ? "Sign In" : "Sign Up"}
+                </button>
+              ))}
+            </motion.div>
+
             <motion.h1
               {...fadeUp(0.15)}
               className="text-2xl sm:text-3xl md:text-4xl font-black text-center leading-tight mb-1.5"
@@ -359,7 +399,7 @@ export default function AuthPage() {
 
           {/* ── Body ── */}
           <div className="px-6 sm:px-10 pb-6 sm:pb-8">
-            {/* Server / global error */}
+            {/* Inline server error banner */}
             <AnimatePresence>
               {serverError && (
                 <motion.div
@@ -379,7 +419,7 @@ export default function AuthPage() {
             </AnimatePresence>
 
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1px_1fr] gap-6 md:gap-0 items-start">
-              {/* ── LEFT: Manual form → backend ── */}
+              {/* ── LEFT: Manual form ── */}
               <div className="flex flex-col gap-1 md:pr-8">
                 {/* Email */}
                 <motion.div {...fadeUp(0.25)} className="flex flex-col gap-1">
@@ -395,8 +435,10 @@ export default function AuthPage() {
                       type="email"
                       value={form.email}
                       onChange={handleChange}
+                      onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                       placeholder="Email Address"
                       autoComplete="email"
+                      disabled={loading || oauthLoading}
                       className={`pl-11 pr-4 py-5 sm:py-6 rounded-full bg-background/85 text-foreground placeholder:text-muted-foreground focus-visible:ring-primary shadow-sm transition-colors ${
                         fieldErrors.email
                           ? "border-[#DD3131]/60 focus-visible:ring-[#DD3131]/30"
@@ -424,6 +466,7 @@ export default function AuthPage() {
                       type={showPassword ? "text" : "password"}
                       value={form.password}
                       onChange={handleChange}
+                      onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
                       placeholder={
                         mode === "signup"
                           ? "Password (min 6 chars, 1 uppercase, 1 number)"
@@ -432,6 +475,7 @@ export default function AuthPage() {
                       autoComplete={
                         mode === "signup" ? "new-password" : "current-password"
                       }
+                      disabled={loading || oauthLoading}
                       className={`pl-11 pr-12 py-5 sm:py-6 rounded-full bg-background/85 text-foreground placeholder:text-muted-foreground focus-visible:ring-primary shadow-sm transition-colors ${
                         fieldErrors.password
                           ? "border-[#DD3131]/60 focus-visible:ring-[#DD3131]/30"
@@ -457,40 +501,31 @@ export default function AuthPage() {
                   <FieldError message={fieldErrors.password} />
                 </motion.div>
 
-                {/* Password strength hint — signup only */}
-                {mode === "signup" && form.password.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="flex gap-1.5 items-center pl-2 mt-1"
-                  >
-                    {[
-                      form.password.length >= 6,
-                      /[A-Z]/.test(form.password),
-                      /[0-9]/.test(form.password),
-                    ].map((met, i) => (
-                      <div
-                        key={i}
-                        className="flex-1 h-1 rounded-full transition-colors duration-300"
-                        style={{
-                          background: met ? "#007606" : "#EBE9E9",
-                        }}
-                      />
-                    ))}
-                    <span
-                      className="text-[10px] ml-1"
-                      style={{ color: "#858484" }}
+                {/* Password strength — signup only */}
+                <AnimatePresence>
+                  {mode === "signup" && form.password.length > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="flex gap-1.5 items-center pl-2 mt-1"
                     >
-                      {[
-                        form.password.length >= 6,
-                        /[A-Z]/.test(form.password),
-                        /[0-9]/.test(form.password),
-                      ].filter(Boolean).length === 3
-                        ? "Strong"
-                        : "Weak"}
-                    </span>
-                  </motion.div>
-                )}
+                      {strengthChecks.map((met, i) => (
+                        <div
+                          key={i}
+                          className="flex-1 h-1 rounded-full transition-colors duration-300"
+                          style={{ background: met ? "#007606" : "#EBE9E9" }}
+                        />
+                      ))}
+                      <span
+                        className="text-[10px] ml-1"
+                        style={{ color: "#858484" }}
+                      >
+                        {strengthCount === 3 ? "Strong" : "Weak"}
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Submit */}
                 <motion.div
@@ -500,12 +535,8 @@ export default function AuthPage() {
                   className="mt-3"
                 >
                   <Button
-                    onClick={
-                      mode === "signup"
-                        ? handleManualSignUp
-                        : handleManualSignIn
-                    }
-                    disabled={loading}
+                    onClick={handleSubmit}
+                    disabled={loading || oauthLoading}
                     className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-full py-5 sm:py-6 text-xs sm:text-sm tracking-widest uppercase shadow-md flex items-center justify-center gap-2"
                   >
                     {loading ? (
@@ -559,7 +590,7 @@ export default function AuthPage() {
                 <OAuthButton
                   onClick={() => handleOAuth("oauth_google")}
                   icon={<GoogleIcon />}
-                  label="Google"
+                  label={oauthLoading ? "Redirecting..." : "Google"}
                 />
 
                 <div className="flex items-center gap-3">
@@ -579,11 +610,11 @@ export default function AuthPage() {
                   />
                 </div>
 
-                <OAuthButton
+                {/* <OAuthButton
                   onClick={() => handleOAuth("oauth_apple")}
                   icon={<AppleIcon />}
                   label="Apple"
-                />
+                /> */}
 
                 <p
                   className="text-[10px] text-center leading-snug mt-1"
@@ -653,6 +684,8 @@ export default function AuthPage() {
           </motion.div>
         </div>
       </motion.div>
+
+      <div id="clerk-captcha" />
     </div>
   );
 }

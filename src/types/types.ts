@@ -1,8 +1,3 @@
-// src/components/chef-onboarding/types.ts
-// ─────────────────────────────────────────────────────────────
-// Shared types and stepper used across all 4 onboarding steps
-// ─────────────────────────────────────────────────────────────
-
 export type OnboardingStep = 1 | 2 | 3 | 4;
 
 export interface ProfileData {
@@ -10,13 +5,22 @@ export interface ProfileData {
   businessName: string;
   phoneNumber: string;
   shortBio: string;
+  email: string;        // ← new: required for backend User creation
+  firstName?: string;   // ← new: optional
+  lastName?: string;
+  password:string// ← new: optional
 }
 
 export interface KitchenData {
   kitchenPhotoUrl: string | null;
   menuPhotoUrl: string | null;
   location: string;
-  areasOfService: string;
+  latitude: number | null;      // ← new: from useLocation hook
+  longitude: number | null;     // ← new: from useLocation hook
+  areasOfService: string;       // comma-separated ServiceType values
+  foodSpecialty: string;        // ← new: comma-separated e.g. "Kenyan,BBQ"
+  availability: string;         // ← new: comma-separated DayOfWeek values
+  yearsOfExperience: number;    // ← new
 }
 
 export interface VerificationData {
@@ -25,14 +29,10 @@ export interface VerificationData {
   businessPermitUrl: string | null;
 }
 
-export type PaymentMethod = "mpesa" | "bank";
-
 export interface PaymentData {
-  method: PaymentMethod;
-  // M-Pesa fields
+  method: "mpesa" | "bank";
   mpesaPhone: string;
   mpesaName: string;
-  // Bank fields
   bankName: string;
   accountNumber: string;
   accountHolderName: string;

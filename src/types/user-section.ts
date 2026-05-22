@@ -135,3 +135,58 @@ export interface CancelSubscriptionPayload {
   subscriptionId: string;
   reason: string | null;
 }
+
+
+export interface PublicBusiness {
+  id: string;
+  name: string;
+  description: string | null;
+  city: string;
+  state: string;
+  country: string;
+  latitude: number | null;
+  longitude: number | null;
+  logoUrl: string | null;
+  premiseImageUrl: string | null;
+  foodSpecialty: string[];
+  services: ServiceType[];
+  availability: DayOfWeek[];
+  businessHours: BusinessHour[];
+  distanceKm: number | null;
+  chef: {
+    id: string;
+    email: string;
+    profile: {
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+    } | null;
+  };
+  _count: { menuItems: number; reviews: number };
+  // computed on frontend
+  rating?: number;
+  reviewCount?: number;
+  isOpen?: boolean;
+  priceMin?: number;
+  priceMax?: number;
+  isFeatured?: boolean;
+  isTopRated?: boolean;
+  chefName?: string;
+}
+
+export interface BusinessHour {
+  id: string;
+  day: DayOfWeek;
+  openTime: string;
+  closeTime: string;
+  isClosed: boolean;
+}
+
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+}

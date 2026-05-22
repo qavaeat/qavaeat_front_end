@@ -1,38 +1,182 @@
-
 "use client";
 
-import { useState } from "react";
+
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { MapPin, Truck } from "lucide-react";
+import {
+  MapPin,
+  Truck,
+  Navigation,
+  ChefHat,
+  Calendar,
+  Clock,
+  Loader2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { FileUploadZone } from "./FileUploadZone";
 import { uploadFile } from "@/lib/supabase-upload";
 import type { KitchenData } from "../../types/types";
 import { toast } from "sonner";
+import { LocationPicker } from "@/lib/locationPicker";
+import type { PickedLocation } from "@/lib/maps";
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const DAY_OPTIONS = [
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
+] as const;
+
+const DAY_LABELS: Record<string, string> = {
+  MONDAY: "Mon",
+  TUESDAY: "Tue",
+  WEDNESDAY: "Wed",
+  THURSDAY: "Thu",
+  FRIDAY: "Fri",
+  SATURDAY: "Sat",
+  SUNDAY: "Sun",
+};
+
+const SERVICE_OPTIONS = [
+  { value: "DELIVERY", label: "Delivery" },
+  { value: "PICKUP", label: "Pickup" },
+  { value: "DINE_IN", label: "Dine-in" },
+] as const;
+
+// ── Nominatim helper ──────────────────────────────────────────────────────────
+// Reverse-geocodes a lat/lng pair and returns a short human-readable address.
+// Falls back to display_name if the address parts aren't specific enough.
+
+interface NominatimResponse {
+  display_name?: string;
+  address?: {
+    road?: string;
+    pedestrian?: string;
+    suburb?: string;
+    neighbourhood?: string;
+    quarter?: string;
+    city?: string;
+    town?: string;
+    county?: string;
+  };
+}
+
+async function reverseGeocode(lat: number, lng: number): Promise<string> {
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+    { headers: { "Accept-Language": "en" } },
+  );
+  const json: NominatimResponse = await res.json();
+
+  if (!json) throw new Error("Empty response");
+
+  const addr = json.address;
+  if (addr) {
+    const short = [
+      addr.road ?? addr.pedestrian,
+      addr.suburb ?? addr.neighbourhood ?? addr.quarter,
+      addr.city ?? addr.town ?? addr.county,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    if (short) return short;
+  }
+
+  return json.display_name ?? "";
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   data: KitchenData;
   onComplete: (data: KitchenData) => void;
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function Step2Kitchen({ data, onComplete }: Props) {
-  const [form, setForm] = useState<KitchenData>(data);
+  const [form, setForm] = useState<KitchenData>({
+    ...data,
+    latitude: data.latitude ?? null,
+    longitude: data.longitude ?? null,
+    foodSpecialty: data.foodSpecialty ?? "",
+    availability: data.availability ?? "",
+    yearsOfExperience: data.yearsOfExperience ?? 0,
+  });
+
   const [kitchenFile, setKitchenFile] = useState<File | null>(null);
   const [menuFile, setMenuFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+  // Tracks geocoding state so the GPS button shows a spinner while resolving
+
+  // ADD after the form state:
+  const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(
+    data.latitude && data.longitude
+      ? {
+          formatted_address: data.location,
+          lat: data.latitude,
+          lng: data.longitude,
+        }
+      : null,
+  );
+
+  const handleLocationChange = useCallback((loc: PickedLocation | null) => {
+    setPickedLocation(loc);
+    setForm((prev) => ({
+      ...prev,
+      location: loc?.formatted_address ?? "",
+      latitude: loc?.lat ?? null,
+      longitude: loc?.lng ?? null,
+    }));
+  }, []);
+
+  // ── Day / service toggles ───────────────────────────────────────────────────
+
+  const toggleDay = (day: string) => {
+    const current = form.availability
+      ? form.availability.split(",").filter(Boolean)
+      : [];
+    const updated = current.includes(day)
+      ? current.filter((d) => d !== day)
+      : [...current, day];
+    setForm((prev) => ({ ...prev, availability: updated.join(",") }));
   };
 
-  // location and areasOfService required; photos nullable
+  const toggleService = (value: string) => {
+    const current = form.areasOfService
+      ? form.areasOfService.split(",").filter(Boolean)
+      : [];
+    const updated = current.includes(value)
+      ? current.filter((s) => s !== value)
+      : [...current, value];
+    setForm((prev) => ({ ...prev, areasOfService: updated.join(",") }));
+  };
+
+  const selectedDays = form.availability
+    ? form.availability.split(",").filter(Boolean)
+    : [];
+
+  const selectedServices = form.areasOfService
+    ? form.areasOfService.split(",").filter(Boolean)
+    : [];
+
+  // ── Validation ──────────────────────────────────────────────────────────────
+
   const isValid =
-    form.location.trim().length > 0 && form.areasOfService.trim().length > 0;
+    form.location.trim().length > 0 &&
+    selectedServices.length > 0 &&
+    form.foodSpecialty.trim().length > 0 &&
+    selectedDays.length > 0 &&
+    form.yearsOfExperience >= 0;
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
 
   const handleContinue = async () => {
     if (!isValid) return;
@@ -41,12 +185,9 @@ export function Step2Kitchen({ data, onComplete }: Props) {
       let kitchenUrl = form.kitchenPhotoUrl;
       let menuUrl = form.menuPhotoUrl;
 
-      if (kitchenFile) {
+      if (kitchenFile)
         kitchenUrl = await uploadFile("chef-kitchens", kitchenFile, "kitchen/");
-      }
-      if (menuFile) {
-        menuUrl = await uploadFile("chef-menus", menuFile, "menu/");
-      }
+      if (menuFile) menuUrl = await uploadFile("chef-menus", menuFile, "menu/");
 
       onComplete({
         ...form,
@@ -60,27 +201,29 @@ export function Step2Kitchen({ data, onComplete }: Props) {
     }
   };
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-    >
-      <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-1">
-          Create Your Business Profile
-        </h1>
-        <p className="text-sm sm:text-base text-muted-foreground">
-          Food lovers will see this when discovering your kitchen
-        </p>
-      </div>
+  // ── Render ──────────────────────────────────────────────────────────────────
 
-      <div className="bg-background/80 backdrop-blur-sm rounded-2xl border border-border p-5 sm:p-6 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr] gap-5 sm:gap-6">
-          {/* Left — photo uploads */}
-          <div className="flex flex-col gap-4">
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <div className="mb-6">
+          <h1 className="text-2xl sm:text-3xl font-black text-foreground mb-1">
+            Your Kitchen & Services
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
+            Help customers find you and understand what you offer
+          </p>
+        </div>
+
+        <div className="bg-background/80 backdrop-blur-sm rounded-2xl border border-border p-5 sm:p-6 shadow-sm space-y-6">
+          {/* ── Photo uploads ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <FileUploadZone
-              label="Upload Kitchen or Working Area Photo"
+              label="Kitchen / Working Area Photo"
               hint="Drag photo here or browse"
               accept="image/*"
               type="image"
@@ -91,9 +234,8 @@ export function Step2Kitchen({ data, onComplete }: Props) {
                 setKitchenFile(file);
               }}
             />
-
             <FileUploadZone
-              label="Upload Sample Menu Photo"
+              label="Sample Menu Photo"
               hint="Drag photo here or browse"
               accept="image/*"
               type="image"
@@ -106,88 +248,146 @@ export function Step2Kitchen({ data, onComplete }: Props) {
             />
           </div>
 
-          {/* Right — location fields */}
-          <div className="flex flex-col gap-4">
-            {/* Location */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-foreground">
-                Location
-              </label>
-              <div className="relative">
-                <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  name="location"
-                  value={form.location}
-                  onChange={handleChange}
-                  placeholder="Name"
-                  className="pl-10 rounded-xl border-border bg-background"
-                />
-              </div>
-              {/*
-                ── Google Maps Integration slot ──
-                When ready, replace the Input above with a Google Places
-                Autocomplete input. Install @react-google-maps/api and use:
+          {/* ── Location ── */}
 
-                <Autocomplete
-                  onLoad={(a) => setAutocomplete(a)}
-                  onPlaceChanged={() => {
-                    const place = autocomplete.getPlace();
-                    setForm(p => ({ ...p, location: place.formatted_address }));
-                  }}
-                >
-                  <input placeholder="Search location..." className="..." />
-                </Autocomplete>
+          <LocationPicker
+            value={pickedLocation}
+            onChange={handleLocationChange}
+            label="Kitchen Location"
+            confirmLabel="Kitchen location set"
+            hint="Search, use GPS, or tap the map to pin your kitchen"
+            required
+          />
 
-                Add NEXT_PUBLIC_GOOGLE_MAPS_KEY to .env.local
-              */}
+          {/* ── Services offered ── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Truck className="w-4 h-4 text-muted-foreground" />
+              Services Offered <span className="text-destructive">*</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {SERVICE_OPTIONS.map(({ value, label }) => {
+                const active = selectedServices.includes(value);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleService(value)}
+                    className={`px-4 py-2 rounded-full text-xs font-bold border transition-all ${
+                      active
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedServices.length === 0 && (
               <p className="text-[10px] text-muted-foreground pl-1">
-                Google Maps integration ready — add your API key to enable
-                autocomplete
+                Select at least one service
               </p>
-            </div>
+            )}
+          </div>
 
-            {/* Areas of Service */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-                Areas of Service
-                <span className="text-xs text-muted-foreground font-normal">
-                  (Can put multiple)
-                </span>
-              </label>
-              <div className="relative">
-                <Truck className="absolute left-3.5 top-3.5 w-4 h-4 text-muted-foreground" />
-                <Textarea
-                  name="areasOfService"
-                  value={form.areasOfService}
-                  onChange={handleChange}
-                  placeholder="e.g. Westlands, Parklands, Kilimani"
-                  rows={5}
-                  className="pl-10 rounded-xl border-border bg-background resize-none text-sm"
-                />
-              </div>
+          {/* ── Food specialties ── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <ChefHat className="w-4 h-4 text-muted-foreground" />
+              Food Specialties <span className="text-destructive">*</span>
+            </label>
+            <Input
+              name="foodSpecialty"
+              value={form.foodSpecialty}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, foodSpecialty: e.target.value }))
+              }
+              placeholder="e.g. Kenyan, BBQ, Vegan, Swahili cuisine"
+              className="rounded-xl border-border bg-background"
+            />
+            <p className="text-[10px] text-muted-foreground pl-1">
+              Separate multiple specialties with commas
+            </p>
+          </div>
+
+          {/* ── Available days ── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-muted-foreground" />
+              Available Days <span className="text-destructive">*</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {DAY_OPTIONS.map((day) => {
+                const active = selectedDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => toggleDay(day)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                      active
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                    }`}
+                  >
+                    {DAY_LABELS[day]}
+                  </button>
+                );
+              })}
             </div>
+            {selectedDays.length === 0 && (
+              <p className="text-[10px] text-muted-foreground pl-1">
+                Select at least one day
+              </p>
+            )}
+          </div>
+
+          {/* ── Years of experience ── */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              Years of Cooking Experience{" "}
+              <span className="text-destructive">*</span>
+            </label>
+            <Input
+              type="number"
+              name="yearsOfExperience"
+              min={0}
+              max={60}
+              value={form.yearsOfExperience}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  yearsOfExperience: Math.max(0, Number(e.target.value)),
+                }))
+              }
+              placeholder="e.g. 5"
+              className="rounded-xl border-border bg-background w-32"
+            />
+          </div>
+
+          {/* ── Continue ── */}
+          <div className="flex justify-end pt-2">
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button
+                onClick={handleContinue}
+                disabled={!isValid || uploading}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-black tracking-widest uppercase rounded-full px-10 py-5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Uploading...
+                  </span>
+                ) : (
+                  "Continue"
+                )}
+              </Button>
+            </motion.div>
           </div>
         </div>
-
-        <div className="mt-6 flex justify-end">
-          <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-            <Button
-              onClick={handleContinue}
-              disabled={!isValid || uploading}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-black tracking-widest uppercase rounded-full px-10 py-5 text-sm disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {uploading ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Uploading...
-                </span>
-              ) : (
-                "Continue"
-              )}
-            </Button>
-          </motion.div>
-        </div>
-      </div>
-    </motion.div>
+      </motion.div>
+    </>
   );
 }

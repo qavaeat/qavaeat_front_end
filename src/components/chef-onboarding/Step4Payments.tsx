@@ -174,7 +174,7 @@ export function Step4Payments({ data, onComplete }: Props) {
                       name="mpesaPhone"
                       value={form.mpesaPhone}
                       onChange={handleChange}
-                      placeholder="+245 ..."
+                      placeholder="+2 ..."
                       className="pl-11 rounded-xl border-border bg-background"
                       type="tel"
                     />

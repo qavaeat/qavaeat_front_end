@@ -104,7 +104,7 @@ export function StepComplete({ chefName }: Props) {
         {/* CTA */}
         <div className="flex flex-col items-center gap-3">
           <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
-            <Link href="/chef/dashboard">
+            <Link href="/menu">
               <Button className="bg-primary hover:bg-primary/90 text-primary-foreground font-black tracking-widest uppercase rounded-full px-10 py-5 text-sm shadow-md">
                 Browse as Customer
               </Button>

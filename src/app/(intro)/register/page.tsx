@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,6 +9,7 @@ import { Step3Verifications } from "@/components/chef-onboarding/Step3Verificati
 import { Step4Payments } from "@/components/chef-onboarding/Step4Payments";
 import { StepComplete } from "@/components/chef-onboarding/StepComplete";
 import { toast } from "sonner";
+import { buildBusinessPayload, submitBusiness } from "@/lib/submit-business";
 import type {
   OnboardingStep,
   OnboardingData,
@@ -25,12 +25,21 @@ const INITIAL_DATA: OnboardingData = {
     businessName: "",
     phoneNumber: "",
     shortBio: "",
+    email: "",     
+    firstName: "",    
+    lastName: "",
+    password:""
   },
   kitchen: {
     kitchenPhotoUrl: null,
     menuPhotoUrl: null,
     location: "",
+    latitude: null,
+    longitude: null,
     areasOfService: "",
+    foodSpecialty: "",
+    availability: "",
+    yearsOfExperience: 0,
   },
   verification: {
     idFrontUrl: null,
@@ -49,30 +58,24 @@ const INITIAL_DATA: OnboardingData = {
 
 export default function ChefRegisterPage() {
   const [step, setStep] = useState<OnboardingStep>(1);
-  // maxStep tracks the furthest step reached — controls which steps are clickable
   const [maxStep, setMaxStep] = useState<OnboardingStep>(1);
   const [data, setData] = useState<OnboardingData>(INITIAL_DATA);
   const [complete, setComplete] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Advance step, always updating maxStep ──────────────
   const goToStep = (next: OnboardingStep) => {
     setStep(next);
     if (next > maxStep) setMaxStep(next);
-    // Scroll to top of content on step change
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // ── Clicking a completed step in the stepper ───────────
   const handleStepClick = (clicked: OnboardingStep) => {
-    // Only allow going back (or to any visited step)
     if (clicked <= maxStep) {
       setStep(clicked);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
-  // ── Step completion handlers ───────────────────────────
   const handleProfile = (profile: ProfileData) => {
     setData((d) => ({ ...d, profile }));
     goToStep(2);
@@ -89,31 +92,13 @@ export default function ChefRegisterPage() {
   };
 
   const handlePayment = async (payment: PaymentData) => {
-    const finalData = { ...data, payment };
+    const finalData: OnboardingData = { ...data, payment };
     setData(finalData);
     setSubmitting(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-
-      if (apiUrl) {
-        // ── POST to your backend when API URL is configured ──
-        const res = await fetch(`${apiUrl}/chefs/onboard`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(finalData),
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err?.message ?? "Submission failed.");
-        }
-      } else {
-        // simulation of  submission delay ──
-        await new Promise((r) => setTimeout(r, 1200));
-      }
-
-      // ── Always show the complete screen on success ──
+      const payload = buildBusinessPayload(finalData);
+      await submitBusiness(payload);
       setComplete(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
@@ -126,130 +111,63 @@ export default function ChefRegisterPage() {
 
   return (
     <div className="relative w-full min-h-screen bg-muted/30">
-      {/* Side chef images */}
+
       <div className="fixed left-0 top-0 bottom-0 w-[22%] pointer-events-none hidden lg:block">
-        <Image
-          src="/chef-left.png"
-          alt=""
-          fill
-          className="object-cover object-top opacity-60"
-          sizes="22vw"
-        />
+        <Image src="/chef-left.png" alt="" fill className="object-cover object-top opacity-60" sizes="22vw" />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent to-muted/30" />
       </div>
+
       <div className="fixed right-0 top-0 bottom-0 w-[22%] pointer-events-none hidden lg:block">
-        <Image
-          src="/chef-right.png"
-          alt=""
-          fill
-          className="object-cover object-top opacity-60"
-          sizes="22vw"
-        />
+        <Image src="/chef-right.png" alt="" fill className="object-cover object-top opacity-60" sizes="22vw" />
         <div className="absolute inset-0 bg-gradient-to-l from-transparent to-muted/30" />
       </div>
 
-      {/* Content panel */}
       <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-10 lg:py-12">
-        {/* Stepper — hidden on complete screen, shows on all 4 steps */}
-        {!complete && (
-          <div className="mb-8">
-            <OnboardingStepper
-              currentStep={step}
-              maxStep={maxStep}
-              onStepClick={handleStepClick}
-            />
-          </div>
-        )}
 
-        {/* Completion stepper — all ticks green */}
-        {complete && (
-          <div className="mb-8">
-            <OnboardingStepper
-              currentStep={4}
-              maxStep={4}
-              onStepClick={() => {}}
-            />
-          </div>
-        )}
+        <div className="mb-8">
+          <OnboardingStepper
+            currentStep={complete ? 4 : step}
+            maxStep={complete ? 4 : maxStep}
+            onStepClick={complete ? () => {} : handleStepClick}
+          />
+        </div>
 
-        {/* Step content with animated transitions */}
         <AnimatePresence mode="wait">
           {complete ? (
-            <motion.div
-              key="complete"
-              initial={{ opacity: 0, y: 20, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.5, ease: "easeOut" }}
-            >
+            <motion.div key="complete" initial={{ opacity: 0, y: 20, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.5, ease: "easeOut" }}>
               <StepComplete chefName={data.profile.businessName || "Chef"} />
             </motion.div>
           ) : step === 1 ? (
-            <motion.div
-              key="step1"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.25 }}>
               <Step1Profile data={data.profile} onComplete={handleProfile} />
             </motion.div>
           ) : step === 2 ? (
-            <motion.div
-              key="step2"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="step2" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.25 }}>
               <Step2Kitchen data={data.kitchen} onComplete={handleKitchen} />
             </motion.div>
           ) : step === 3 ? (
-            <motion.div
-              key="step3"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.25 }}
-            >
-              <Step3Verifications
-                data={data.verification}
-                onComplete={handleVerification}
-              />
+            <motion.div key="step3" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.25 }}>
+              <Step3Verifications data={data.verification} onComplete={handleVerification} />
             </motion.div>
           ) : (
-            <motion.div
-              key="step4"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="step4" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} transition={{ duration: 0.25 }}>
               <Step4Payments data={data.payment} onComplete={handlePayment} />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Global submitting overlay */}
         <AnimatePresence>
           {submitting && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center z-50"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center z-50">
               <div className="flex flex-col items-center gap-4 bg-background rounded-2xl px-8 py-6 shadow-xl border border-border">
                 <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-                <p className="text-sm font-semibold text-foreground">
-                  Submitting your application...
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  This will only take a moment
-                </p>
+                <p className="text-sm font-semibold text-foreground">Submitting your application...</p>
+                <p className="text-xs text-muted-foreground">This will only take a moment</p>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
       </div>
     </div>
   );
