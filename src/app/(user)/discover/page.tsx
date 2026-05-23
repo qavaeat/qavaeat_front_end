@@ -119,7 +119,14 @@ function SortPortal({
   triggerRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const [pos, setPos] = useState({ top: 0, right: 0 });
-  const [mounted] = useState(true);
+  const isMounted = useRef(false);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (open && triggerRef.current) {
@@ -130,6 +137,7 @@ function SortPortal({
       });
     }
   }, [open, triggerRef]);
+
   useEffect(() => {
     if (!open) return;
     const h = (e: MouseEvent) => {
@@ -140,7 +148,8 @@ function SortPortal({
     return () => document.removeEventListener("mousedown", h);
   }, [open, setOpen, triggerRef]);
 
-  if (!mounted) return null;
+  if (typeof window === "undefined") return null;
+
   return createPortal(
     <AnimatePresence>
       {open && (

@@ -9,7 +9,7 @@ async function tryRefresh(): Promise<boolean> {
 
   refreshPromise = (async () => {
     try {
-      const res = await window._originalFetch("/api/auth/refresh", {
+      const res = await window._originalFetch!("/api/auth/refresh", {
         method: "POST",
         credentials: "same-origin",
       });
@@ -67,17 +67,17 @@ export function installFetchInterceptor() {
     const isAuthCall = url.includes("/api/auth");
 
     if (!isApiCall || isRefreshCall || isAuthCall) {
-      return window._originalFetch(input, init);
+      return window._originalFetch!(input, init);
     }
 
-    const response = await window._originalFetch(input, init);
+    const response = await window._originalFetch!(input, init);
 
     if (response.status === 401) {
       const refreshed = await tryRefresh();
 
       if (refreshed) {
         // Retry the original request
-        return window._originalFetch(input, init);
+        return window._originalFetch!(input, init);
       }
 
       handleSessionExpired();
@@ -90,6 +90,6 @@ export function installFetchInterceptor() {
 // Extend window type
 declare global {
   interface Window {
-    _originalFetch: typeof fetch;
+    _originalFetch: typeof fetch| undefined;
   }
 }
