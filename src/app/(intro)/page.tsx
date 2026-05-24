@@ -12,7 +12,6 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <main className="min-h-screen w-full">
-      <h1 className="text-5xl text-red-700">Testing something real quick</h1>
       <HeroSection />
     </main>
   );
