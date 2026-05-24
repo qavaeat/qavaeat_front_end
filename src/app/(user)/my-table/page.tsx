@@ -71,7 +71,6 @@ function localDate(y: number, m: number, d: number): Date {
   return new Date(y, m, d);
 }
 
-// Module-level stable today — won't change within a session
 const _today = (() => {
   const n = new Date();
   return new Date(n.getFullYear(), n.getMonth(), n.getDate());
@@ -134,14 +133,31 @@ function isBefore(a: Date, b: Date): boolean {
 }
 
 // ─────────────────────────────────────────────────────
-// Normalize DayMap
+// Normalize DayMap — preserves ALL fields including paid / itemStatus
 // ─────────────────────────────────────────────────────
 function normalizeDays(days: WeekSchedule | DayMap | null | undefined): DayMap {
   if (!days || typeof days !== "object") return {};
   const out: DayMap = {};
   for (const [k, v] of Object.entries(days)) {
-    if (v != null)
-      out[String(k)] = v as Record<MealTime, ScheduledMeal | undefined>;
+    if (v != null) {
+      // Ensure every meal entry has the required boolean/string fields that
+      // may be missing from older API payloads after the type migration.
+      const normalized: Record<MealTime, ScheduledMeal | undefined> =
+        {} as Record<MealTime, ScheduledMeal | undefined>;
+      for (const [mt, meal] of Object.entries(v as Record<string, unknown>)) {
+        if (meal && typeof meal === "object") {
+          const m = meal as Partial<ScheduledMeal>;
+          normalized[mt as MealTime] = {
+            ...m,
+            paid: m.paid === true,
+            itemStatus: m.itemStatus ?? "PENDING",
+          } as ScheduledMeal;
+        } else {
+          normalized[mt as MealTime] = undefined;
+        }
+      }
+      out[String(k)] = normalized;
+    }
   }
   return out;
 }
@@ -246,16 +262,9 @@ const TIME_OPTIONS = [
 // ─────────────────────────────────────────────────────
 // Phone utils
 // ─────────────────────────────────────────────────────
-/**
- * Normalizes Kenyan phone numbers to E.164 format (+254XXXXXXXXX).
- * Accepts: 07XX XXX XXX, 01XX XXX XXX, +2547XX..., 2547XX...
- * Returns null if invalid.
- */
 function normalizeKEPhone(raw: string): string | null {
   const digits = raw.replace(/\D/g, "");
-  // 07XX or 01XX (10 digits starting with 0)
   if (/^0[17]\d{8}$/.test(digits)) return `+254${digits.slice(1)}`;
-  // 2547XX or 2541XX (12 digits starting with 254)
   if (/^254[17]\d{8}$/.test(digits)) return `+${digits}`;
   return null;
 }
@@ -263,7 +272,6 @@ function normalizeKEPhone(raw: string): string | null {
 function formatKEPhoneDisplay(raw: string): string {
   const normalized = normalizeKEPhone(raw);
   if (!normalized) return raw;
-  // +254 7XX XXX XXX
   return normalized.replace(/^\+254(\d{3})(\d{3})(\d{3})$/, "+254 $1 $2 $3");
 }
 
@@ -292,8 +300,10 @@ function allMealsInSchedules(
   return r;
 }
 function unpaidMeals(s: Record<WeekKey, SavedSchedule>): ScheduledMeal[] {
-  return allMealsInSchedules(s).filter((m) => !m.paid);
+  return allMealsInSchedules(s).filter((m) => m.paid !== true);
 }
+
+// FIX: buildDayMealMap — correctly maps day-index (0=Mon…6=Sun) to calendar dates
 function buildDayMealMap(
   saved: Record<WeekKey, SavedSchedule>,
 ): Record<string, boolean> {
@@ -301,6 +311,7 @@ function buildDayMealMap(
   for (const week of Object.values(saved)) {
     if (!week?.weekKey) continue;
     const sunday = fromYMD(week.weekKey);
+    // weekKey is the Sunday before the Monday; Monday = sunday + 1 day
     const monday = localDate(
       sunday.getFullYear(),
       sunday.getMonth(),
@@ -309,6 +320,7 @@ function buildDayMealMap(
     const dm = normalizeDays(week.days);
     for (const [di, dd] of Object.entries(dm)) {
       if (dd && Object.values(dd).some((m) => m != null)) {
+        // di is 0=Monday … 6=Sunday
         const date = localDate(
           monday.getFullYear(),
           monday.getMonth(),
@@ -320,6 +332,7 @@ function buildDayMealMap(
   }
   return map;
 }
+
 function earliestSavedWeekStart(
   saved: Record<WeekKey, SavedSchedule>,
   thisWeekStart: Date,
@@ -421,9 +434,6 @@ function TimePicker({
 // ─────────────────────────────────────────────────────
 // MealCell
 // ─────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────
-// MealCell
-// ─────────────────────────────────────────────────────
 function MealCell({
   mealTime,
   scheduled,
@@ -498,7 +508,7 @@ function MealCell({
           </span>
         )}
 
-        {/* Remove button */}
+        {/* Remove button — only for unpaid, non-readonly */}
         {!ip && !readonly && (
           <button
             onClick={onRemove}
@@ -509,13 +519,12 @@ function MealCell({
           </button>
         )}
 
-        {/* ── Top section: emoji + name + kitchen ── */}
+        {/* Top section: emoji + name + kitchen */}
         <div className="flex items-start gap-2 p-2.5 pb-2">
           <span className="text-xl flex-shrink-0 leading-none mt-0.5">
             {scheduled.emoji}
           </span>
           <div className="flex-1 min-w-0">
-            {/* pr-6 leaves room for the badge/remove button */}
             <p className="text-[11px] font-bold text-foreground leading-tight line-clamp-2 pr-6">
               {scheduled.name}
             </p>
@@ -525,10 +534,10 @@ function MealCell({
           </div>
         </div>
 
-        {/* ── Divider ── */}
+        {/* Divider */}
         <div className="w-full border-t border-border/40" />
 
-        {/* ── Price + Time row ── */}
+        {/* Price + Time row */}
         <div className="flex items-center justify-between gap-1 px-2.5 py-1.5">
           <span
             className={`text-[11px] font-black leading-none ${
@@ -542,6 +551,7 @@ function MealCell({
               </span>
             )}
           </span>
+          {/* Paid meals show static time; unpaid get the picker */}
           {ip ? (
             <span className="text-[10px] text-muted-foreground flex-shrink-0">
               {time}
@@ -551,7 +561,7 @@ function MealCell({
           )}
         </div>
 
-        {/* ── Quantity controls — always centered, full width ── */}
+        {/* Quantity controls — only for unpaid editable meals */}
         {!ip && !readonly && (
           <>
             <div className="w-full border-t border-border/40" />
@@ -774,7 +784,6 @@ function PhoneInput({
 
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2.5">
-      {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -801,7 +810,6 @@ function PhoneInput({
         </button>
       </div>
 
-      {/* Context line — shown when using own number */}
       {!useAlt && (
         <p className="text-[10px] text-muted-foreground">
           The M-Pesa prompt will go to your registered number. Tap above if a
@@ -809,7 +817,6 @@ function PhoneInput({
         </p>
       )}
 
-      {/* Payer input — shown when override is active */}
       <AnimatePresence>
         {useAlt && (
           <motion.div
@@ -824,7 +831,6 @@ function PhoneInput({
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wide">
                   Payer&apos;s M-Pesa Number
                 </label>
-                {/* Small badge clarifying the intent */}
                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                   They&apos;ll get the prompt
                 </span>
@@ -952,19 +958,67 @@ function PaymentWaitingOverlay({
       )}
 
       {isComplete && (
-        <>
-          <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+        <motion.div
+          key="success"
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          className="flex flex-col items-center gap-5"
+        >
+          {/* Animated ring that shrinks as the modal auto-closes */}
+          <div className="relative w-24 h-24 flex items-center justify-center">
+            <svg
+              className="absolute inset-0 w-24 h-24 -rotate-90"
+              viewBox="0 0 96 96"
+            >
+              <circle
+                cx="48"
+                cy="48"
+                r="44"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="4"
+                className="text-emerald-200 dark:text-emerald-900"
+              />
+              <motion.circle
+                cx="48"
+                cy="48"
+                r="44"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 44}`}
+                className="text-emerald-500"
+                initial={{ strokeDashoffset: 0 }}
+                animate={{ strokeDashoffset: 2 * Math.PI * 44 }}
+                transition={{ duration: 1.8, ease: "linear" }}
+              />
+            </svg>
+            <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 18,
+                  delay: 0.1,
+                }}
+              >
+                <CheckCircle2 className="w-9 h-9 text-emerald-500" />
+              </motion.div>
+            </div>
           </div>
-          <div>
+          <div className="space-y-1.5">
             <p className="text-lg font-black text-foreground">
-              Payment confirmed!
+              Payment confirmed! 🎉
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your meals are now locked in. Moving to My Table…
+            <p className="text-sm text-muted-foreground">
+              Your meals are locked in. Closing now…
             </p>
           </div>
-        </>
+        </motion.div>
       )}
 
       {isFailed && (
@@ -1048,13 +1102,11 @@ function CheckoutModal({
   const [deliveryLocation, setDeliveryLocation] =
     useState<PickedLocation | null>(null);
 
-  // Phone override state
   const [altPhoneRaw, setAltPhoneRaw] = useState("");
   const [altPhoneNormalized, setAltPhoneNormalized] = useState<string | null>(
     null,
   );
 
-  // Payment waiting state
   const [waitingApiRef, setWaitingApiRef] = useState<string | null>(null);
 
   const handleCancelWaiting = async () => {
@@ -1062,13 +1114,10 @@ function CheckoutModal({
     if (ref) {
       await onCancelPayment(ref);
     }
-    // ← Must null these BEFORE calling reset(), otherwise isWaiting
-    //   stays true (isWaiting = waitingApiRef !== null) and the modal
-    //   never returns to the summary view
     setWaitingApiRef(null);
     waitingApiRefSnapshot.current = null;
     setConfirmedTotal(null);
-    reset(); // ← now safe to call after nulling the ref
+    reset();
     setAltPhoneRaw("");
     setAltPhoneNormalized(null);
     onClose();
@@ -1081,10 +1130,23 @@ function CheckoutModal({
 
   const { pollStatus, secondsLeft, startPolling, reset } = usePaymentStatus(
     useCallback(() => {
-      onPaymentCompleteRef.current(); // ← direct call, stable ref, no intermediate state
+      onPaymentCompleteRef.current();
     }, []),
     useCallback(() => {}, []),
   );
+
+  // Auto-dismiss after a brief success flash so the modal never gets stuck
+  useEffect(() => {
+    if (pollStatus !== "complete") return;
+    const t = setTimeout(() => {
+      setWaitingApiRef(null);
+      waitingApiRefSnapshot.current = null;
+      setConfirmedTotal(null);
+      reset();
+      onPaymentCompleteRef.current();
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [pollStatus, reset]);
 
   useEffect(() => {
     if (pollStatus !== "timeout") return;
@@ -1128,7 +1190,7 @@ function CheckoutModal({
           mon.getDate() + Number(di),
         );
         const ord = MEAL_TIMES.map((mt) => dd[mt])
-          .filter((m): m is ScheduledMeal => !!m && !m.paid)
+          .filter((m): m is ScheduledMeal => !!m && m.paid !== true)
           .map((m) => {
             seenMealIds.add(m.id);
             return {
@@ -1184,7 +1246,8 @@ function CheckoutModal({
         );
         const ord = MEAL_TIMES.map((mt) => dd[mt])
           .filter(
-            (m): m is ScheduledMeal => !!m && !m.paid && !seenMealIds.has(m.id), // ← dedup here
+            (m): m is ScheduledMeal =>
+              !!m && m.paid !== true && !seenMealIds.has(m.id),
           )
           .map((m) => ({
             meal: m,
@@ -1258,13 +1321,12 @@ function CheckoutModal({
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [allMeals]);
 
-  // Phone to use for STK push
   const effectivePhone = altPhoneNormalized ?? customerPhone;
+  void effectivePhone; // used in STK push via onConfirm
 
   const canPlace =
     (serviceType !== "DELIVERY" ||
       !!deliveryLocation?.formatted_address?.trim()) &&
-    // If alt phone is entered, it must be valid
     (altPhoneRaw.trim() === "" || altPhoneNormalized !== null);
 
   const handlePlace = async () => {
@@ -1290,8 +1352,6 @@ function CheckoutModal({
   };
 
   const isWaiting = waitingApiRef !== null;
-
-  // Display phone for the waiting screen
   const displayPhone = altPhoneNormalized
     ? formatKEPhoneDisplay(altPhoneRaw)
     : customerPhone;
@@ -1375,7 +1435,6 @@ function CheckoutModal({
                 key="summary"
                 className="p-4 sm:p-5 space-y-4 sm:space-y-5"
               >
-                {/* Kitchen summary */}
                 {kitchenSummary.length > 0 && (
                   <div className="rounded-xl border border-border bg-muted/30 p-3">
                     <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
@@ -1406,7 +1465,6 @@ function CheckoutModal({
                   </div>
                 )}
 
-                {/* Week groups */}
                 {weekGroups.map((group, gi) => (
                   <div
                     key={gi}
@@ -1561,7 +1619,6 @@ function CheckoutModal({
                   />
                 )}
 
-                {/* Phone number */}
                 <PhoneInput
                   systemPhone={customerPhone}
                   value={altPhoneRaw}
@@ -1771,7 +1828,7 @@ function ScheduleManagerModal({
               );
               const dm = normalizeDays(week.days);
               const meals = mealsInDayMap(dm);
-              const paidCount = meals.filter((m) => m.paid).length;
+              const paidCount = meals.filter((m) => m.paid === true).length;
               const unpaid = meals.length - paidCount;
               const isFullyPaid =
                 meals.length > 0 && paidCount === meals.length;
@@ -1905,7 +1962,7 @@ function ScheduleManagerModal({
                           <span className="text-[11px] font-black text-primary">
                             KES {meal.price * (meal.quantity ?? 1)}
                           </span>
-                          {meal.paid && (
+                          {meal.paid === true && (
                             <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                           )}
                         </div>
@@ -2024,8 +2081,14 @@ function WalletPanel({
     () => allMealsInSchedules(savedSchedules),
     [savedSchedules],
   );
-  const paidMeals = useMemo(() => allMeals.filter((m) => m.paid), [allMeals]);
-  const dueMeals = useMemo(() => allMeals.filter((m) => !m.paid), [allMeals]);
+  const paidMeals = useMemo(
+    () => allMeals.filter((m) => m.paid === true),
+    [allMeals],
+  );
+  const dueMeals = useMemo(
+    () => allMeals.filter((m) => m.paid !== true),
+    [allMeals],
+  );
 
   const totalScheduled = useMemo(
     () => allMeals.reduce((s, m) => s + m.price * (m.quantity ?? 1), 0),
@@ -2067,7 +2130,7 @@ function WalletPanel({
       for (const [di, dm2] of Object.entries(dm)) {
         if (!dm2) continue;
         for (const meal of Object.values(dm2)) {
-          if (!meal?.paid) continue;
+          if (!meal || meal.paid !== true) continue;
           const date = localDate(
             monday.getFullYear(),
             monday.getMonth(),
@@ -2237,30 +2300,12 @@ function WalletPanel({
   );
 }
 
-// ─── REPLACEMENT: drop in place of existing MyTableViewer in page.tsx ─────────
-//
-// New behaviour:
-//  • EAT-aware today (UTC+3) gates delivery confirmation buttons
-//  • Paid meals on TODAY → "Received" + "Not Received" buttons
-//  • Paid meals on past/future days → read-only status badges
-//  • Optimistic status updates — no full reload needed per confirmation
-//  • Inline "Not Received" confirmation panel (AnimatePresence slide)
-//  • Fully responsive: xs (320px) → sm → lg → xl breakpoints covered
-//  • Theme-only colors: primary / destructive / chart-3 / secondary / muted
-//    No hardcoded hex, no emerald-*, no amber-*, no violet-*
-//
-// Also add these two helpers OUTSIDE the component (module scope):
-//   todayEAT() and useScheduleItemActions()
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ─── EAT helper ───────────────────────────────────────────────────────────────
-
+// ─────────────────────────────────────────────────────
+// EAT helper & schedule item actions hook
+// ─────────────────────────────────────────────────────
 function todayEAT(): string {
-  // Africa/Nairobi = UTC+3 always (no DST)
   return new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString().split("T")[0]!;
 }
-
-// ─── Schedule item actions hook ───────────────────────────────────────────────
 
 function useScheduleItemActions(
   onOptimisticUpdate: (itemId: string, status: string) => void,
@@ -2316,8 +2361,9 @@ function useScheduleItemActions(
   };
 }
 
-// ─── MyTableViewer ─────────────────────────────────────────────────────────────
-
+// ─────────────────────────────────────────────────────
+// MyTableViewer
+// ─────────────────────────────────────────────────────
 function MyTableViewer({
   savedSchedules,
   onRemoveItem,
@@ -2344,7 +2390,7 @@ function MyTableViewer({
   const isCurrentWeek = sameDay(baseWeekStart, thisWeekStart);
   const isPastWeek = isBefore(baseWeekStart, thisWeekStart);
 
-  // Optimistic item status overrides — avoids full reload per confirmation
+  // Optimistic item status overrides
   const [itemStatusOverrides, setItemStatusOverrides] = useState<
     Record<string, string>
   >({});
@@ -2363,7 +2409,7 @@ function MyTableViewer({
     confirmMissed,
   } = useScheduleItemActions(handleOptimisticUpdate);
 
-  // Stable EAT today — only computed once per mount
+  // Stable EAT today
   const eatToday = useMemo(() => todayEAT(), []);
 
   // ── Derived schedule data ──────────────────────────────────────────────────
@@ -2417,9 +2463,22 @@ function MyTableViewer({
     () => (currentSaved ? normalizeDays(currentSaved.days) : {}),
     [currentSaved],
   );
-  const dayMeals =
-    currentDayMap[String(selIdx)] ??
-    ({} as Record<MealTime, ScheduledMeal | undefined>);
+
+  // FIX: dayMeals — always an object; fall back to empty record so the
+  // MEAL_TIMES.map loop below produces nulls rather than showing empty state.
+  const dayMeals: Record<MealTime, ScheduledMeal | undefined> = useMemo(
+    () =>
+      currentDayMap[String(selIdx)] ??
+      ({} as Record<MealTime, ScheduledMeal | undefined>),
+    [currentDayMap, selIdx],
+  );
+
+  // FIX: hasMealsForDay — checks if ANY meal time has a value for the selected day
+  const hasMealsForDay = useMemo(
+    () => MEAL_TIMES.some((mt) => !!dayMeals[mt]),
+    [dayMeals],
+  );
+
   const allThisWeek = useMemo(
     () => mealsInDayMap(currentDayMap),
     [currentDayMap],
@@ -2427,7 +2486,7 @@ function MyTableViewer({
   const thisWeekDue = useMemo(
     () =>
       allThisWeek
-        .filter((m) => !m.paid)
+        .filter((m) => m.paid !== true)
         .reduce((s, m) => s + m.price * (m.quantity ?? 1), 0),
     [allThisWeek],
   );
@@ -2471,7 +2530,7 @@ function MyTableViewer({
       const meal = normalizeDays(savedSchedules[wk]?.days ?? {})[
         String(dayIdx)
       ]?.[mt];
-      if (!meal || meal.paid) return;
+      if (!meal || meal.paid === true) return;
       await onRemoveItem(wk, meal.id);
     },
     [isPastWeek, savedSchedules, wk, onRemoveItem],
@@ -2501,21 +2560,20 @@ function MyTableViewer({
   }, [weekDates, selIdx, baseWeekStart]);
   const canActOnDay = selectedDayEAT === eatToday;
 
-  // Whether any paid-but-unconfirmed items exist today (for escrow notice)
+  // Whether any paid-but-unconfirmed items exist today
   const hasPendingConfirmations = useMemo(
     () =>
       canActOnDay &&
       allThisWeek.some(
         (m) =>
-          m.paid &&
+          m.paid === true &&
           !["DELIVERED", "MISSED", "CANCELLED"].includes(
-            itemStatusOverrides[m.id] ?? m.itemStatus,
+            itemStatusOverrides[m.id] ?? m.itemStatus ?? "PENDING",
           ),
       ),
     [canActOnDay, allThisWeek, itemStatusOverrides],
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-3 sm:space-y-4 lg:space-y-5">
       {/* ── Outstanding balance banner ── */}
@@ -2673,7 +2731,7 @@ function MyTableViewer({
                 </div>
               </div>
 
-              {/* Day picker — horizontally scrollable on all sizes */}
+              {/* Day picker */}
               <div className="flex gap-1 sm:gap-1.5 lg:gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
                 {weekDates.map((date, i) => {
                   const isToday = sameDay(date, TODAY);
@@ -2684,7 +2742,7 @@ function MyTableViewer({
                     currentDayMap[String(i)] ?? {},
                   ).filter((m): m is ScheduledMeal => m != null);
                   const allPaid =
-                    dayArr.length > 0 && dayArr.every((m) => m.paid);
+                    dayArr.length > 0 && dayArr.every((m) => m.paid === true);
                   return (
                     <button
                       key={i}
@@ -2736,7 +2794,7 @@ function MyTableViewer({
 
             {/* ── Meal list for selected day ── */}
             <div className="p-3 sm:p-4 lg:p-5 min-h-[260px] sm:min-h-[300px]">
-              {Object.values(dayMeals).every((m) => !m) ? (
+              {!hasMealsForDay ? (
                 <div className="text-center py-10 sm:py-14 lg:py-16 space-y-3">
                   <p className="text-4xl sm:text-5xl">📅</p>
                   <p className="text-sm font-semibold text-foreground">
@@ -2764,8 +2822,11 @@ function MyTableViewer({
                     const ip = meal.paid === true;
                     const displayTime = toDisplayTime(meal);
                     const qty = meal.quantity ?? 1;
+                    // FIX: safe fallback for itemStatus which may be absent on older records
                     const effectiveStatus =
-                      itemStatusOverrides[meal.id] ?? meal.itemStatus;
+                      itemStatusOverrides[meal.id] ??
+                      meal.itemStatus ??
+                      "PENDING";
                     const isDelivered = effectiveStatus === "DELIVERED";
                     const isMissed = effectiveStatus === "MISSED";
                     const showActions =
@@ -2794,9 +2855,7 @@ function MyTableViewer({
                                 ? "border-chart-3/20 bg-chart-3/10"
                                 : isMissed
                                   ? "border-destructive/20 bg-destructive/10"
-                                  : ip
-                                    ? "border-border bg-muted"
-                                    : "border-border bg-muted"
+                                  : "border-border bg-muted"
                             }`}
                           >
                             {isDelivered ? (
@@ -2904,7 +2963,7 @@ function MyTableViewer({
                                 )}
                             </div>
 
-                            {/* Action buttons — stack on xs, row on sm+ */}
+                            {/* Action buttons — Received / Not Received */}
                             {showActions && (
                               <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-1.5 sm:gap-2 mt-3">
                                 <Button
@@ -2938,7 +2997,7 @@ function MyTableViewer({
                             )}
                           </div>
 
-                          {/* Remove button — unpaid only, hover on desktop, always visible on touch */}
+                          {/* Remove button — unpaid only */}
                           {!isPastWeek && !ip && (
                             <button
                               onClick={() => deleteMeal(selIdx, mt)}
@@ -2976,7 +3035,6 @@ function MyTableViewer({
                                       be paid for this meal. An admin will
                                       review the dispute. This cannot be undone.
                                     </p>
-                                    {/* Confirmation buttons — full-width on xs, auto on sm+ */}
                                     <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-1.5 sm:gap-2 mt-3">
                                       <Button
                                         onClick={() =>
@@ -3033,7 +3091,7 @@ function MyTableViewer({
                   )}
                   {(() => {
                     const paidTotal = allThisWeek
-                      .filter((m) => m.paid)
+                      .filter((m) => m.paid === true)
                       .reduce((s, m) => s + m.price * (m.quantity ?? 1), 0);
                     return paidTotal > 0 ? (
                       <span className="font-black text-chart-3">
@@ -3046,7 +3104,7 @@ function MyTableViewer({
             )}
           </div>
 
-          {/* ── Wallet panel — unchanged ── */}
+          {/* ── Wallet panel ── */}
           <WalletPanel savedSchedules={savedSchedules} />
         </div>
       )}
@@ -3117,7 +3175,7 @@ function WeekScheduler({
   useEffect(() => {
     onSeededRefClear(() => {
       seeded.current.clear();
-      setAllWeekSchedules({}); // ← wipe so seed effect starts from blank
+      setAllWeekSchedules({});
       setAllSlotTimes({});
     });
   }, [onSeededRefClear]);
@@ -3133,7 +3191,7 @@ function WeekScheduler({
   // Register getDraft
   const getDraft = useCallback(() => {
     const cur = allWeekSchedules[wk] ?? {};
-    const nm = mealsInDayMap(cur).filter((m) => !m.paid);
+    const nm = mealsInDayMap(cur).filter((m) => m.paid !== true);
     if (!nm.length) return null;
     return { weekKey: wk, weekMondayYMD, schedule: cur as WeekSchedule };
   }, [allWeekSchedules, wk, weekMondayYMD]);
@@ -3142,11 +3200,18 @@ function WeekScheduler({
     onRegisterGetDraft(getDraft);
   }, [onRegisterGetDraft, getDraft]);
 
-  // FIX: Seed from saved schedules — both setStates wrapped in startTransition
+  // FIX: Seed from saved schedules — use normalizeDays which now preserves
+  // paid/itemStatus fields. The seededKey uses scheduleId so we re-seed
+  // whenever the server returns an updated schedule (e.g. after payment).
   useEffect(() => {
     const existing = savedSchedules[wk];
     if (!existing) return;
-    const seededKey = `${wk}:${existing.scheduleId ?? JSON.stringify(Object.keys(existing.days ?? {}).sort())}`;
+
+    // Re-seed whenever scheduleId or the set of days changes
+    const dayKeys = Object.keys(existing.days ?? {})
+      .sort()
+      .join(",");
+    const seededKey = `${wk}:${existing.scheduleId ?? ""}:${dayKeys}`;
     if (seeded.current.has(seededKey)) return;
     seeded.current.add(seededKey);
 
@@ -3154,7 +3219,6 @@ function WeekScheduler({
     const normalized = normalizeDays(existing.days);
 
     startTransition(() => {
-      // ← Replace instead of merge to prevent accumulation
       setAllWeekSchedules((prev) => ({ ...prev, [wk]: normalized }));
       setAllSlotTimes((prev) => {
         const times: Record<string, Record<MealTime, string>> = {};
@@ -3206,8 +3270,8 @@ function WeekScheduler({
             time: slotTimes[dk]?.[mealTime] ?? DEFAULT_TIMES[mealTime],
             prepTimeMin: meal.prepTimeMin,
             paidAt: null,
-            paid: false, // FIX: required by ScheduledMeal type
-            itemStatus: "PENDING", // FIX: required by ScheduledMeal type
+            paid: false,
+            itemStatus: "PENDING",
           } satisfies ScheduledMeal,
         },
       }));
@@ -3219,7 +3283,7 @@ function WeekScheduler({
     (dayIdx: number, mealTime: MealTime) => {
       const dk = String(dayIdx);
       const ex = schedule[dk]?.[mealTime];
-      if (ex?.paid) {
+      if (ex?.paid === true) {
         toast.error("Paid meals cannot be removed");
         return;
       }
@@ -3237,7 +3301,7 @@ function WeekScheduler({
       const dk = String(dayIdx);
       setSchedule((prev) => {
         const ex = prev[dk]?.[mealTime];
-        if (!ex || ex.paid) return prev;
+        if (!ex || ex.paid === true) return prev;
         return {
           ...prev,
           [dk]: { ...prev[dk], [mealTime]: { ...ex, quantity: qty } },
@@ -3294,13 +3358,13 @@ function WeekScheduler({
     combinedTotal,
     combinedCount,
   } = useMemo(() => {
-    const nm = mealsInDayMap(schedule).filter((m) => !m.paid);
+    const nm = mealsInDayMap(schedule).filter((m) => m.paid !== true);
     const nt = nm.reduce((s, m) => s + m.price * (m.quantity ?? 1), 0);
     const ou = Object.entries(savedSchedules)
       .filter(([k]) => k !== wk)
       .flatMap(([, w]) =>
         w?.days
-          ? mealsInDayMap(normalizeDays(w.days)).filter((m) => !m.paid)
+          ? mealsInDayMap(normalizeDays(w.days)).filter((m) => m.paid !== true)
           : [],
       );
     const ot = ou.reduce((s, m) => s + m.price * (m.quantity ?? 1), 0);
@@ -3313,10 +3377,14 @@ function WeekScheduler({
     };
   }, [savedSchedules, wk, schedule]);
 
-  const dayMealMap = useMemo(
+  // FIX: dayMealMap for the scheduler dot indicators — built from both
+  // saved schedules AND the current in-progress schedule state so dots
+  // appear as soon as a meal is assigned even before save.
+  const savedDayMealMap = useMemo(
     () => buildDayMealMap(savedSchedules),
     [savedSchedules],
   );
+
   const firstDay = weekDates[0] ?? baseWeekStart;
   const lastDay = weekDates[6] ?? baseWeekStart;
   const weekLabel = `Week of ${MONTHS[firstDay.getMonth()] ?? ""} ${firstDay.getDate()} – ${lastDay.getDate()}, ${lastDay.getFullYear()}`;
@@ -3451,14 +3519,18 @@ function WeekScheduler({
                 const isPast = isBefore(date, TODAY);
                 const dk = String(i);
                 const hasPaid = Object.values(schedule[dk] ?? {}).some(
-                  (m) => m?.paid,
+                  (m) => m?.paid === true,
                 );
                 const isSel = i === mobileDayIdx;
                 const isToday = sameDay(date, TODAY);
-                const hasSaved = !!dayMealMap[toYMD(date)];
+                // FIX: dot shows for both saved meals AND unsaved draft meals
+                const hasSaved = !!savedDayMealMap[toYMD(date)];
+                const hasDraft = Object.values(schedule[dk] ?? {}).some(
+                  (m) => m != null,
+                );
                 let count = 0;
                 for (const m of Object.values(schedule[dk] ?? {})) {
-                  if (m && !m.paid) count++;
+                  if (m && m.paid !== true) count++;
                 }
                 return (
                   <button
@@ -3487,7 +3559,8 @@ function WeekScheduler({
                     >
                       {date.getDate()}
                     </span>
-                    {(count > 0 || hasSaved) && (
+                    {/* FIX: dot appears for saved OR draft meals */}
+                    {(count > 0 || hasSaved || hasDraft) && (
                       <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
                     )}
                   </button>
@@ -3551,13 +3624,18 @@ function WeekScheduler({
                 const isToday = sameDay(date, TODAY);
                 const dk = String(i);
                 const hasPaid = Object.values(schedule[dk] ?? {}).some(
-                  (m) => m?.paid,
+                  (m) => m?.paid === true,
                 );
+                // FIX: count only unsaved draft new meals for the "+N" badge
                 let nc = 0;
                 for (const m of Object.values(schedule[dk] ?? {})) {
-                  if (m && !m.paid) nc++;
+                  if (m && m.paid !== true) nc++;
                 }
-                const hasSaved = !!dayMealMap[toYMD(date)];
+                // FIX: dot/check shows for saved days OR days with any meal in draft
+                const hasSaved = !!savedDayMealMap[toYMD(date)];
+                const hasDraft = Object.values(schedule[dk] ?? {}).some(
+                  (m) => m != null,
+                );
                 return (
                   <div
                     key={i}
@@ -3575,12 +3653,14 @@ function WeekScheduler({
                     >
                       {date.getDate()}
                     </p>
-                    {(nc > 0 || hasSaved) && (
+                    {/* New unsaved meals badge */}
+                    {nc > 0 && (
                       <span className="inline-block text-[9px] font-black text-primary bg-primary/10 rounded-full px-1.5 py-0.5">
-                        {nc > 0 ? `+${nc}` : "✓"}
+                        +{nc}
                       </span>
                     )}
-                    {hasPaid && nc === 0 && !hasSaved && (
+                    {/* Saved / paid check mark — shown when no unsaved drafts */}
+                    {nc === 0 && (hasSaved || hasDraft) && (
                       <span className="inline-block text-[9px] font-black text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-full px-1.5 py-0.5">
                         ✓
                       </span>
@@ -3636,7 +3716,7 @@ function WeekScheduler({
                 let count = 0;
                 for (const d of Object.values(schedule)) {
                   const meal = d ? d[mt] : undefined;
-                  if (meal && !meal.paid) count++;
+                  if (meal && meal.paid !== true) count++;
                 }
                 return (
                   <div
@@ -3733,7 +3813,6 @@ function WeekScheduler({
 export default function MyTablePage() {
   const TODAY = getToday();
 
-  // FIX: stable reference — memoized, not recreated each render
   const thisWeekStart = useMemo(() => weekStartOf(TODAY), []);
 
   const { loading: planLoading } = usePlan();
@@ -3748,10 +3827,9 @@ export default function MyTablePage() {
     checkout,
     loadSchedules,
     customerPhone,
-    cancelPayment, // ← add this
+    cancelPayment,
   } = useSchedules();
 
-  // FIX: derive mounted — no useState + useEffect needed
   const mounted = !planLoading && !schedulesLoading;
 
   const [activeTab, setActiveTab] = useState<"mytable" | "schedule">("mytable");
@@ -3813,7 +3891,7 @@ export default function MyTablePage() {
           MealTime,
           ScheduledMeal | undefined,
         ][]) {
-          if (!meal || meal.paid) continue;
+          if (!meal || meal.paid === true) continue;
           items.push({
             menuItemId: meal.plannedMealId,
             scheduledDate: localDayYMD(weekMondayYMD, Number(di)),
@@ -3867,7 +3945,6 @@ export default function MyTablePage() {
       deliveryLocation?: PickedLocation,
       phoneOverride?: string,
     ): Promise<{ apiRef: string; grandTotal: number }> => {
-      // Save draft first if present
       if (checkoutDraft) {
         const tz = getUserTimezone();
         const items: {
@@ -3884,7 +3961,7 @@ export default function MyTablePage() {
             MealTime,
             ScheduledMeal | undefined,
           ][]) {
-            if (!meal || meal.paid) continue;
+            if (!meal || meal.paid === true) continue;
             items.push({
               menuItemId: meal.plannedMealId,
               scheduledDate: localDayYMD(
@@ -3967,35 +4044,29 @@ export default function MyTablePage() {
     setActiveTab("mytable");
   }, []);
 
-  // FIXED — close modal instantly, reload in background
- const handlePaymentComplete = useCallback(() => {
-  setShowCheckout(false);
-  setActiveTab("mytable");
-  toast.success("Payment confirmed! Your meals are locked in. 🎉", {
-    duration: 4000,
-  });
-  clearSeededRef.current?.();
-  // Defer reload until after AnimatePresence exit animation completes (~300ms)
-  setTimeout(() => void loadSchedules(), 400);
-}, [loadSchedules]);
-
-  // ↓ ADD THESE TWO RIGHT HERE ↓
+  const handlePaymentComplete = useCallback(() => {
+    setShowCheckout(false);
+    setActiveTab("mytable");
+    toast.success("Payment confirmed! Your meals are locked in. 🎉", {
+      duration: 4000,
+    });
+    clearSeededRef.current?.();
+    setTimeout(() => void loadSchedules(), 400);
+  }, [loadSchedules]);
 
   const handleCancelPayment = useCallback(
     async (apiRef: string) => {
-      await cancelPayment(apiRef); // tell backend this attempt is cancelled/timed out
-      clearSeededRef.current?.(); // wipe seeded state so retry re-seeds fresh
-      await loadSchedules(); // reload so UI reflects the cancelled state
+      await cancelPayment(apiRef);
+      clearSeededRef.current?.();
+      await loadSchedules();
     },
     [cancelPayment, loadSchedules],
   );
 
   const handleOpenCheckout = useCallback(
     async (draft: typeof checkoutDraft) => {
-      await loadSchedules(); // ← fresh DB state first
+      await loadSchedules();
 
-      // After reload, check if draft meals are already in savedSchedules.
-      // If they are (post-fail scenario), don't pass a draft at all.
       const freshDraft = draft
         ? (() => {
             const draftMeals = mealsInDayMap(
@@ -4007,7 +4078,7 @@ export default function MyTablePage() {
               ),
             );
             const hasNewMeals = draftMeals.some((m) => !savedIds.has(m.id));
-            return hasNewMeals ? draft : null; // ← null if everything already saved
+            return hasNewMeals ? draft : null;
           })()
         : null;
 
@@ -4018,7 +4089,6 @@ export default function MyTablePage() {
     [loadSchedules, savedSchedules],
   );
 
-  // Loading screen
   if (!mounted) {
     return (
       <div className="relative min-h-screen">
@@ -4165,7 +4235,7 @@ export default function MyTablePage() {
             onClose={handleCheckoutClose}
             onConfirm={handleConfirmPayment}
             onPaymentComplete={handlePaymentComplete}
-            onCancelPayment={handleCancelPayment} // ← add this
+            onCancelPayment={handleCancelPayment}
           />
         )}
         {showManager && (
