@@ -1,20 +1,55 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
+const PUBLIC_ROUTES = [
   "/",
-  "/auth(.*)",
-  "/sso-callback(.*)",
-  "/chefs(.*)",
-  "/faq(.*)",
-  "/contact(.*)",
-  "/news(.*)",
-]);
+  "/auth",
+  "/forgot-password",
+  "/reset-password",
+  "/chefs",
+  "/faq",
+  "/contact",
+  "/news",
+];
 
-export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect();
+const PUBLIC_PREFIXES = [
+  "/auth/",
+  "/chefs/",
+  "/faq/",
+  "/contact/",
+  "/news/",
+  "/forgot-password/",
+  "/reset-password/",
+  "/sso-callback/",
+  "/_next/",
+  "/api/auth/",
+];
+
+function isPublic(pathname: string): boolean {
+  if (PUBLIC_ROUTES.includes(pathname)) return true;
+  if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix)))
+    return true;
+  return false;
+}
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isPublic(pathname)) {
+    return NextResponse.next();
   }
-});
+
+  const token =
+    request.cookies.get("accessToken")?.value ??
+    request.cookies.get("access_token")?.value;
+
+  if (!token) {
+    const loginUrl = new URL("/auth", request.url);
+    loginUrl.searchParams.set("returnTo", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
@@ -22,16 +57,3 @@ export const config = {
     "/(api|trpc)(.*)",
   ],
 };
-
-
-// ─────────────────────────────────────────────
-// .env.local — add these variables
-// ─────────────────────────────────────────────
-//
-// NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_...
-// CLERK_SECRET_KEY=sk_...
-//
-// NEXT_PUBLIC_CLERK_SIGN_IN_URL=/auth
-// NEXT_PUBLIC_CLERK_SIGN_UP_URL=/auth
-// NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
-// NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/

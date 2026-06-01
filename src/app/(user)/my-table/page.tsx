@@ -508,11 +508,10 @@ function MealCell({
           </span>
         )}
 
-        {/* Remove button — only for unpaid, non-readonly */}
         {!ip && !readonly && (
           <button
             onClick={onRemove}
-            className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 w-5 h-5 rounded-full bg-destructive/10 text-destructive flex items-center justify-center transition-all"
+            className="absolute top-1.5 right-1.5 z-10 w-5 h-5 rounded-full bg-destructive text-white flex items-center justify-center transition-all shadow-sm"
             aria-label="Remove meal"
           >
             <X className="w-3 h-3" />

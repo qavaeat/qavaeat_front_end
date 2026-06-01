@@ -1,7 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  Loader2, MapPin, Navigation, X, CheckCircle2,
-  Building2, ChevronDown, Search,
+  Loader2,
+  MapPin,
+  Navigation,
+  X,
+  CheckCircle2,
+  Building2,
+  ChevronDown,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,22 +28,22 @@ import {
 // ─── New Places library types ─────────────────────────────────────────────────
 
 interface GPlaceResult {
-  id?:               string;
-  displayName?:      string;
+  id?: string;
+  displayName?: string;
   formattedAddress?: string;
-  location?:         GLatLng;
+  location?: GLatLng;
   addressComponents?: Array<{
-    longText:  string;
+    longText: string;
     shortText: string;
-    types:     string[];
+    types: string[];
   }>;
   fetchFields(opts: { fields: string[] }): Promise<{ place: GPlaceResult }>;
 }
 
 interface GPlacePrediction {
-  placeId:       string;
-  text:          { text: string };
-  mainText:      { text: string };
+  placeId: string;
+  text: { text: string };
+  mainText: { text: string };
   secondaryText: { text: string };
   toPlace(): GPlaceResult;
 }
@@ -49,9 +55,9 @@ interface GAutocompleteSuggestion {
 interface GPlacesLibrary {
   AutocompleteSuggestion: {
     fetchAutocompleteSuggestions(req: {
-      input:               string;
-      sessionToken?:       object;
-      locationBias?:       object;
+      input: string;
+      sessionToken?: object;
+      locationBias?: object;
       includedRegionCodes?: string[];
     }): Promise<{ suggestions: GAutocompleteSuggestion[] }>;
   };
@@ -61,27 +67,27 @@ interface GPlacesLibrary {
 // ─── Internal suggestion shape ────────────────────────────────────────────────
 
 interface Suggestion {
-  placeId:          string;
-  mainText:         string;
-  secondaryText:    string;
-  placePrediction:  GPlacePrediction;
+  placeId: string;
+  mainText: string;
+  secondaryText: string;
+  placePrediction: GPlacePrediction;
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface LocationPickerProps {
-  value:          PickedLocation | null;
-  onChange:       (loc: PickedLocation | null) => void;
-  label?:         string;
-  confirmLabel?:  string;
-  hint?:          string;
-  compact?:       boolean;
-  boundsSW?:      { lat: number; lng: number };
-  boundsNE?:      { lat: number; lng: number };
+  value: PickedLocation | null;
+  onChange: (loc: PickedLocation | null) => void;
+  label?: string;
+  confirmLabel?: string;
+  hint?: string;
+  compact?: boolean;
+  boundsSW?: { lat: number; lng: number };
+  boundsNE?: { lat: number; lng: number };
   defaultCenter?: { lat: number; lng: number };
-  onConfirmed?:   (loc: PickedLocation) => void;
-  required?:      boolean;
-  disabled?:      boolean;
+  onConfirmed?: (loc: PickedLocation) => void;
+  required?: boolean;
+  disabled?: boolean;
 }
 
 // ─── Pin element ──────────────────────────────────────────────────────────────
@@ -89,9 +95,13 @@ interface LocationPickerProps {
 function createPinElement(): HTMLDivElement {
   const el = document.createElement("div");
   el.style.cssText = [
-    "width:22px", "height:22px", "border-radius:50%",
-    "background:#f97316", "border:2.5px solid #ffffff",
-    "box-shadow:0 1px 4px rgba(0,0,0,0.35)", "cursor:pointer",
+    "width:22px",
+    "height:22px",
+    "border-radius:50%",
+    "background:#f97316",
+    "border:2.5px solid #ffffff",
+    "box-shadow:0 1px 4px rgba(0,0,0,0.35)",
+    "cursor:pointer",
   ].join(";");
   return el;
 }
@@ -101,35 +111,35 @@ function createPinElement(): HTMLDivElement {
 export function LocationPicker({
   value,
   onChange,
-  label         = "Location",
-  confirmLabel  = "Location confirmed",
+  label = "Location",
+  confirmLabel = "Location confirmed",
   hint,
-  compact       = false,
-  boundsSW      = { lat: -1.45, lng: 36.6 },
-  boundsNE      = { lat: -1.15, lng: 37.1 },
+  compact = false,
+  boundsSW = { lat: -1.45, lng: 36.6 },
+  boundsNE = { lat: -1.15, lng: 37.1 },
   defaultCenter = { lat: -1.286389, lng: 36.817223 },
   onConfirmed,
-  required  = false,
-  disabled  = false,
+  required = false,
+  disabled = false,
 }: LocationPickerProps) {
-  const [mapsReady,    setMapsReady]    = useState(false);
-  const [mapsError,    setMapsError]    = useState(false);
-  const [geocoding,    setGeocoding]    = useState(false);
-  const [mapLoading,   setMapLoading]   = useState(true);
-  const [searchText,   setSearchText]   = useState("");
-  const [suggestions,  setSuggestions]  = useState<Suggestion[]>([]);
+  const [mapsReady, setMapsReady] = useState(false);
+  const [mapsError, setMapsError] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [mapLoading, setMapLoading] = useState(true);
+  const [searchText, setSearchText] = useState("");
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [activeIdx,    setActiveIdx]    = useState(-1);
-  const [selecting,    setSelecting]    = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const [selecting, setSelecting] = useState(false);
 
-  const mapDivRef      = useRef<HTMLDivElement>(null);
-  const inputRef       = useRef<HTMLInputElement>(null);
-  const mapRef         = useRef<GMap | null>(null);
-  const markerRef      = useRef<GAdvancedMarkerElement | null>(null);
-  const placesLibRef   = useRef<GPlacesLibrary | null>(null);
-  const sessionTokRef  = useRef<object | null>(null);
-  const debounceRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const centerRef      = useRef(defaultCenter);
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const mapRef = useRef<GMap | null>(null);
+  const markerRef = useRef<GAdvancedMarkerElement | null>(null);
+  const placesLibRef = useRef<GPlacesLibrary | null>(null);
+  const sessionTokRef = useRef<object | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const centerRef = useRef(defaultCenter);
 
   // ── Load Maps SDK, then eagerly load the places library ───────────────────
   useEffect(() => {
@@ -158,26 +168,32 @@ export function LocationPicker({
     centerRef.current = pos;
   }, []);
 
-  const commit = useCallback((loc: PickedLocation) => {
-    onChange(loc);
-    panTo(loc.lat, loc.lng);
-    onConfirmed?.(loc);
-    setSearchText("");
-    setSuggestions([]);
-    setShowDropdown(false);
-    setActiveIdx(-1);
-  }, [onChange, panTo, onConfirmed]);
+  const commit = useCallback(
+    (loc: PickedLocation) => {
+      onChange(loc);
+      panTo(loc.lat, loc.lng);
+      onConfirmed?.(loc);
+      setSearchText("");
+      setSuggestions([]);
+      setShowDropdown(false);
+      setActiveIdx(-1);
+    },
+    [onChange, panTo, onConfirmed],
+  );
 
-  const geocodeLatLng = useCallback((pos: GLatLng) => {
-    setGeocoding(true);
-    const { Geocoder } = gmaps();
-    new Geocoder().geocode({ location: pos }, (results, status) => {
-      if (status === "OK" && results?.[0]) {
-        commit(extractLocation(results[0], pos.lat(), pos.lng()));
-      }
-      setGeocoding(false);
-    });
-  }, [commit]);
+  const geocodeLatLng = useCallback(
+    (pos: GLatLng) => {
+      setGeocoding(true);
+      const { Geocoder } = gmaps();
+      new Geocoder().geocode({ location: pos }, (results, status) => {
+        if (status === "OK" && results?.[0]) {
+          commit(extractLocation(results[0], pos.lat(), pos.lng()));
+        }
+        setGeocoding(false);
+      });
+    },
+    [commit],
+  );
 
   // ── Init map ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -189,18 +205,18 @@ export function LocationPicker({
 
     const map = new g.Map(mapDivRef.current, {
       center,
-      zoom:            value ? 15 : 13,
+      zoom: value ? 15 : 13,
       disableDefaultUI: true,
-      zoomControl:     true,
+      zoomControl: true,
       gestureHandling: "cooperative",
-      mapId:           "qavaeat_location_picker",
+      mapId: "qavaeat_location_picker",
       // NOTE: styles[] must NOT be used with mapId — cloud console controls styling
     });
 
     const marker = new g.marker.AdvancedMarkerElement({
       map,
-      position:     center,
-      content:      createPinElement(),
+      position: center,
+      content: createPinElement(),
       gmpDraggable: !disabled,
     });
 
@@ -208,10 +224,14 @@ export function LocationPicker({
       marker.addListener("dragend", () => {
         const p = marker.position;
         if (!p) return;
-        const lat = typeof (p as GLatLng).lat === "function"
-          ? (p as GLatLng).lat() : (p as { lat: number }).lat;
-        const lng = typeof (p as GLatLng).lng === "function"
-          ? (p as GLatLng).lng() : (p as { lng: number }).lng;
+        const lat =
+          typeof (p as GLatLng).lat === "function"
+            ? (p as GLatLng).lat()
+            : (p as { lat: number }).lat;
+        const lng =
+          typeof (p as GLatLng).lng === "function"
+            ? (p as GLatLng).lng()
+            : (p as { lng: number }).lng;
         geocodeLatLng({ lat: () => lat, lng: () => lng } as GLatLng);
       });
       map.addListener("click", (e: GMapMouseEvent) => {
@@ -221,10 +241,10 @@ export function LocationPicker({
       });
     }
 
-    mapRef.current    = map;
+    mapRef.current = map;
     markerRef.current = marker;
     setMapLoading(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapsReady]);
 
   // ── Fetch autocomplete suggestions ────────────────────────────────────────
@@ -235,7 +255,8 @@ export function LocationPicker({
       return;
     }
 
-    const { AutocompleteSuggestion, AutocompleteSessionToken } = placesLibRef.current;
+    const { AutocompleteSuggestion, AutocompleteSessionToken } =
+      placesLibRef.current;
 
     // Reuse session token — reset it after a place is selected (in commit)
     if (!sessionTokRef.current) {
@@ -246,7 +267,7 @@ export function LocationPicker({
       const { suggestions: raw } =
         await AutocompleteSuggestion.fetchAutocompleteSuggestions({
           input,
-          sessionToken:        sessionTokRef.current,
+          sessionToken: sessionTokRef.current,
           locationBias: {
             // Circle bias — center on current pin, 50 km radius
             center: centerRef.current,
@@ -256,11 +277,12 @@ export function LocationPicker({
         });
 
       const mapped: Suggestion[] = (raw ?? [])
-        .filter(s => s.placePrediction)
-        .map(s => ({
-          placeId:         s.placePrediction.placeId,
-          mainText:        s.placePrediction.mainText?.text ?? s.placePrediction.text.text,
-          secondaryText:   s.placePrediction.secondaryText?.text ?? "",
+        .filter((s) => s.placePrediction)
+        .map((s) => ({
+          placeId: s.placePrediction.placeId,
+          mainText:
+            s.placePrediction.mainText?.text ?? s.placePrediction.text.text,
+          secondaryText: s.placePrediction.secondaryText?.text ?? "",
           placePrediction: s.placePrediction,
         }));
 
@@ -268,7 +290,10 @@ export function LocationPicker({
       setShowDropdown(mapped.length > 0);
       setActiveIdx(-1);
     } catch (err) {
-      console.error("[LocationPicker] fetchAutocompleteSuggestions failed:", err);
+      console.error(
+        "[LocationPicker] fetchAutocompleteSuggestions failed:",
+        err,
+      );
       setSuggestions([]);
       setShowDropdown(false);
     }
@@ -282,56 +307,71 @@ export function LocationPicker({
   };
 
   // ── Select a suggestion ───────────────────────────────────────────────────
-  const selectSuggestion = useCallback(async (s: Suggestion) => {
-    setSelecting(true);
-    setShowDropdown(false);
-    setSearchText(s.mainText);
+  const selectSuggestion = useCallback(
+    async (s: Suggestion) => {
+      setSelecting(true);
+      setShowDropdown(false);
+      setSearchText(s.mainText);
 
-    try {
-      const place = s.placePrediction.toPlace();
-      // fetchFields returns { place } — the same object, now populated
-      await place.fetchFields({
-        fields: ["displayName", "formattedAddress", "location", "id", "addressComponents"],
-      });
+      try {
+        const place = s.placePrediction.toPlace();
+        // fetchFields returns { place } — the same object, now populated
+        await place.fetchFields({
+          fields: [
+            "displayName",
+            "formattedAddress",
+            "location",
+            "id",
+            "addressComponents",
+          ],
+        });
 
-      const lat = place.location?.lat() ?? 0;
-      const lng = place.location?.lng() ?? 0;
+        const lat = place.location?.lat() ?? 0;
+        const lng = place.location?.lng() ?? 0;
 
-      commit(extractLocation(
-        {
-          formatted_address: place.formattedAddress,
-          name:              place.displayName,
-          place_id:          place.id,
-          geometry:          place.location ? { location: place.location } : undefined,
-          address_components: place.addressComponents?.map(c => ({
-            long_name:  c.longText,
-            short_name: c.shortText,
-            types:      c.types,
-          })),
-        },
-        lat,
-        lng,
-      ));
+        commit(
+          extractLocation(
+            {
+              formatted_address: place.formattedAddress,
+              name: place.displayName,
+              place_id: place.id,
+              geometry: place.location
+                ? { location: place.location }
+                : undefined,
+              address_components: place.addressComponents?.map((c) => ({
+                long_name: c.longText,
+                short_name: c.shortText,
+                types: c.types,
+              })),
+            },
+            lat,
+            lng,
+          ),
+        );
 
-      // Reset session token after a completed selection (billing best practice)
-      sessionTokRef.current = null;
-    } catch (err) {
-      console.error("[LocationPicker] place fetchFields failed:", err);
-      toast.error("Couldn't load place details — tap the map to set location");
-    } finally {
-      setSelecting(false);
-    }
-  }, [commit]);
+        // Reset session token after a completed selection (billing best practice)
+        sessionTokRef.current = null;
+      } catch (err) {
+        console.error("[LocationPicker] place fetchFields failed:", err);
+        toast.error(
+          "Couldn't load place details — tap the map to set location",
+        );
+      } finally {
+        setSelecting(false);
+      }
+    },
+    [commit],
+  );
 
   // ── Keyboard nav ──────────────────────────────────────────────────────────
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!showDropdown || !suggestions.length) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIdx(i => Math.min(i + 1, suggestions.length - 1));
+      setActiveIdx((i) => Math.min(i + 1, suggestions.length - 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIdx(i => Math.max(i - 1, 0));
+      setActiveIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
       const target = suggestions[activeIdx] ?? suggestions[0];
@@ -415,9 +455,9 @@ export function LocationPicker({
   // ── Full picker ────────────────────────────────────────────────────────────
   return (
     <div className="space-y-2 w-full">
-
       <label className="text-xs font-black text-foreground">
-        {label}{required && <span className="text-destructive ml-0.5">*</span>}
+        {label}
+        {required && <span className="text-destructive ml-0.5">*</span>}
       </label>
 
       {hint && !value && (
@@ -433,7 +473,7 @@ export function LocationPicker({
         {!disabled && (
           <div
             className="absolute top-3 left-3 z-20"
-            style={{ right: "calc(2.75rem + 0.75rem)" }}
+            style={{ right: "calc(7rem + 0.75rem)" }}
           >
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none z-10" />
@@ -445,7 +485,9 @@ export function LocationPicker({
                 onChange={handleSearchChange}
                 onKeyDown={handleKeyDown}
                 onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-                onFocus={() => { if (suggestions.length > 0) setShowDropdown(true); }}
+                onFocus={() => {
+                  if (suggestions.length > 0) setShowDropdown(true);
+                }}
                 placeholder="Search address…"
                 autoComplete="off"
                 className="w-full pl-9 pr-8 py-2 h-9 text-xs rounded-xl border border-border bg-background/95 backdrop-blur-sm text-foreground placeholder:text-muted-foreground shadow-md focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-colors"
@@ -456,7 +498,7 @@ export function LocationPicker({
               ) : searchText ? (
                 <button
                   type="button"
-                  onMouseDown={e => e.preventDefault()}
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     setSearchText("");
                     setSuggestions([]);
@@ -476,7 +518,7 @@ export function LocationPicker({
                     <button
                       key={s.placeId}
                       type="button"
-                      onMouseDown={e => e.preventDefault()}
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => void selectSuggestion(s)}
                       className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors ${
                         i === activeIdx ? "bg-primary/10" : "hover:bg-muted/60"
@@ -500,17 +542,27 @@ export function LocationPicker({
         )}
 
         {/* ── GPS button ── */}
+        {/* ── GPS button ── */}
         {!disabled && (
           <button
             type="button"
             onClick={() => void handleGps()}
             disabled={geocoding}
-            title="Use my current location"
-            className="absolute top-3 right-3 z-20 w-9 h-9 rounded-xl bg-background/95 backdrop-blur-sm border border-border shadow-md flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-60"
+            className="absolute top-3 right-3 z-20 flex items-center gap-1.5 h-9 px-3 rounded-xl bg-background/95 backdrop-blur-sm border border-border shadow-md text-foreground hover:bg-muted transition-colors disabled:opacity-60 whitespace-nowrap"
           >
-            {geocoding
-              ? <Loader2 className="w-4 h-4 animate-spin text-primary" />
-              : <Navigation className="w-4 h-4 text-primary" />}
+            {geocoding ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-primary flex-shrink-0" />
+                <span className="text-[11px] font-semibold text-primary">
+                  Locating…
+                </span>
+              </>
+            ) : (
+              <>
+                <Navigation className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                <span className="text-[11px] font-semibold">My Location</span>
+              </>
+            )}
           </button>
         )}
 
@@ -548,7 +600,9 @@ export function LocationPicker({
         {mapsError && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/80 z-10 px-6 text-center">
             <MapPin className="w-8 h-8 text-muted-foreground" />
-            <p className="text-xs font-semibold text-foreground">Map unavailable</p>
+            <p className="text-xs font-semibold text-foreground">
+              Map unavailable
+            </p>
             <p className="text-[10px] text-muted-foreground">
               Check your API key or internet connection
             </p>
@@ -575,13 +629,17 @@ export function LocationPicker({
             </p>
             {(value.road ?? value.suburb ?? value.city) && (
               <p className="text-[9px] text-emerald-600/80 dark:text-emerald-500 truncate mt-0.5">
-                {[value.road, value.suburb, value.city, value.country].filter(Boolean).join(" · ")}
+                {[value.road, value.suburb, value.city, value.country]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
             )}
             <p className="text-[9px] text-emerald-600/60 dark:text-emerald-600 mt-0.5 font-mono">
               {coordsLabel(value)}
               {value.place_id && (
-                <span className="ml-2 opacity-70">· {value.place_id.slice(0, 16)}…</span>
+                <span className="ml-2 opacity-70">
+                  · {value.place_id.slice(0, 16)}…
+                </span>
               )}
             </p>
           </div>

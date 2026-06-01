@@ -18,10 +18,10 @@ import {
   UtensilsCrossed,
   ShoppingBag,
   CalendarDays,
+  Home,
 } from "lucide-react";
 import { toast } from "sonner";
 import { usePlan } from "@/context/PlanContext";
-import { useClerk } from "@clerk/nextjs";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface UserData {
@@ -85,7 +85,7 @@ function useUserProfile() {
 const NAV_LINKS = [
   { href: "/discover", label: "Discover", icon: Compass },
   { href: "/my-table", label: "My Table", icon: UtensilsCrossed },
-  { href: "/orders", label: "My Orders", icon: ShoppingBag },
+  { href: "/orders", label: "Order History", icon: ShoppingBag },
   { href: "/meal-plan", label: "Meal Plan", icon: CalendarDays },
 ];
 
@@ -134,7 +134,6 @@ export function UserNav({
   const [loggingOut, setLoggingOut] = useState(false);
   const desktopRef = useRef<HTMLDivElement>(null);
   const { clearPlan } = usePlan();
-  const { signOut } = useClerk();
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -164,35 +163,19 @@ export function UserNav({
     setMobileOpen(false);
   }, [pathname]);
 
-  // In UserNav
-  // const handleLogout = async () => {
-  //   setLoggingOut(true);
-  //   try {
-  //     await fetch("/api/auth/logout", { method: "POST" });
-  //     clearPlan(); // ← wipe in-memory plan before redirect
-  //     toast.success("Logged out successfully.");
-  //     router.push("/auth");
-  //   } catch {
-  //     toast.error("Logout failed. Please try again.");
-  //   } finally {
-  //     setLoggingOut(false);
-  //   }
-  // };
-
- const handleLogout = async () => {
-  setLoggingOut(true);
-  try {
-    await fetch("/api/auth/logout", { method: "POST" });
-    clearPlan();
-    toast.success("Logged out successfully.");
-    await signOut({ redirectUrl: "/auth" });
-  } catch (err) {
-    console.error("[logout] error:", err); // ← add this
-    toast.error("Logout failed. Please try again.");
-  } finally {
-    setLoggingOut(false);
-  }
-};
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      clearPlan();
+      toast.success("Logged out successfully.");
+      router.push("/auth");
+    } catch {
+      toast.error("Logout failed. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   const notifications = [
     { text: "Your breakfast order is being prepared", time: "5m ago" },
@@ -218,7 +201,29 @@ export function UserNav({
 
           {/* Desktop nav links */}
           <nav className="hidden md:flex items-center gap-1">
-            {NAV_LINKS.map((link) => {
+            {/* Home button */}
+            <Link
+              href="/discover"
+              className={`relative px-3 py-2 text-xs font-bold tracking-wide transition-colors flex items-center gap-1.5 rounded-lg ${
+                pathname === "/discover"
+                  ? "text-primary bg-primary/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              <Home className="w-3.5 h-3.5" />
+              HOME
+              {pathname === "/discover" && (
+                <motion.div
+                  layoutId="user-nav-indicator"
+                  className="absolute bottom-0 left-2 right-2 h-0.5 bg-primary rounded-full"
+                />
+              )}
+            </Link>
+
+            {/* Divider */}
+            <div className="w-px h-4 bg-border mx-1 flex-shrink-0" />
+
+            {NAV_LINKS.filter((l) => l.href !== "/discover").map((link) => {
               const active =
                 pathname === link.href || pathname.startsWith(link.href + "/");
               const Icon = link.icon;
@@ -300,7 +305,7 @@ export function UserNav({
               </AnimatePresence>
             </div>
 
-            {/* Avatar + dropdown — desktop only label */}
+            {/* Avatar + dropdown */}
             <div className="relative hidden sm:block">
               <button
                 onClick={() => {
@@ -385,11 +390,10 @@ export function UserNav({
         </div>
       </header>
 
-      {/* ── Mobile drawer ── */}
+      {/* Mobile drawer */}
       <AnimatePresence>
         {mobileOpen && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -399,7 +403,6 @@ export function UserNav({
               onClick={() => setMobileOpen(false)}
             />
 
-            {/* Drawer panel */}
             <motion.div
               initial={{ x: "100%" }}
               animate={{ x: 0 }}
@@ -433,43 +436,78 @@ export function UserNav({
                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest px-3 mb-2">
                   Navigation
                 </p>
-                {NAV_LINKS.map((link, i) => {
-                  const active =
-                    pathname === link.href ||
-                    pathname.startsWith(link.href + "/");
-                  const Icon = link.icon;
-                  return (
-                    <motion.div
-                      key={link.href}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
+
+                {/* Home — mobile */}
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0 }}
+                >
+                  <Link
+                    href="/discover"
+                    className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-colors ${
+                      pathname === "/discover"
+                        ? "bg-primary/10 text-primary"
+                        : "text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        pathname === "/discover"
+                          ? "bg-primary text-white"
+                          : "bg-muted text-muted-foreground"
+                      }`}
                     >
-                      <Link
-                        href={link.href}
-                        className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-colors ${
-                          active
-                            ? "bg-primary/10 text-primary"
-                            : "text-foreground hover:bg-muted"
-                        }`}
+                      <Home className="w-4 h-4" />
+                    </div>
+                    Home
+                    {pathname === "/discover" && (
+                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
+                    )}
+                  </Link>
+                </motion.div>
+
+                <div className="border-t border-border/50 my-1" />
+
+                {NAV_LINKS.filter((l) => l.href !== "/discover").map(
+                  (link, i) => {
+                    const active =
+                      pathname === link.href ||
+                      pathname.startsWith(link.href + "/");
+                    const Icon = link.icon;
+                    return (
+                      <motion.div
+                        key={link.href}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: (i + 1) * 0.05 }}
                       >
-                        <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        <Link
+                          href={link.href}
+                          className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-bold transition-colors ${
                             active
-                              ? "bg-primary text-white"
-                              : "bg-muted text-muted-foreground"
+                              ? "bg-primary/10 text-primary"
+                              : "text-foreground hover:bg-muted"
                           }`}
                         >
-                          <Icon className="w-4 h-4" />
-                        </div>
-                        {link.label}
-                        {active && (
-                          <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
-                        )}
-                      </Link>
-                    </motion.div>
-                  );
-                })}
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              active
+                                ? "bg-primary text-white"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          {link.label}
+                          {active && (
+                            <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
+                          )}
+                        </Link>
+                      </motion.div>
+                    );
+                  },
+                )}
 
                 <div className="border-t border-border my-3" />
 

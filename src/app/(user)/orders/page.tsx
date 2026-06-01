@@ -216,8 +216,12 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
               )}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-black text-foreground">{order.business.name}</p>
-              <p className="text-[10px] text-muted-foreground">{order.business.city}</p>
+              <p className="text-sm font-black text-foreground">
+                {order.business.name}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {order.business.city}
+              </p>
             </div>
           </div>
 
@@ -232,14 +236,22 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
               }`}
             >
               {source === "SCHEDULE" ? (
-                <><CalendarRange className="w-2.5 h-2.5" /> Schedule</>
+                <>
+                  <CalendarRange className="w-2.5 h-2.5" /> Schedule
+                </>
               ) : source === "MEAL_PLAN" ? (
-                <><Salad className="w-2.5 h-2.5" /> Meal Plan</>
+                <>
+                  <Salad className="w-2.5 h-2.5" /> Meal Plan
+                </>
               ) : (
-                <><ShoppingCart className="w-2.5 h-2.5" /> Direct</>
+                <>
+                  <ShoppingCart className="w-2.5 h-2.5" /> Direct
+                </>
               )}
             </span>
-            <span className={`text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 ${status.pill}`}>
+            <span
+              className={`text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 ${status.pill}`}
+            >
               <status.icon className="w-3 h-3" />
               {status.label}
             </span>
@@ -265,12 +277,17 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground truncate">{item.name}</p>
+                <p className="text-xs font-bold text-foreground truncate">
+                  {item.name}
+                </p>
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="text-[10px] text-muted-foreground">×{item.quantity}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    ×{item.quantity}
+                  </span>
                   {item.mealTime && (
                     <span className="text-[9px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full capitalize">
-                      {item.mealTime.charAt(0) + item.mealTime.slice(1).toLowerCase()}
+                      {item.mealTime.charAt(0) +
+                        item.mealTime.slice(1).toLowerCase()}
                     </span>
                   )}
                   {item.plannedDate && (
@@ -292,7 +309,8 @@ function OrderCard({ order, index }: { order: Order; index: number }) {
               onClick={() => setExpanded(true)}
               className="text-[10px] text-primary font-bold hover:underline w-full text-center py-1"
             >
-              +{order.items.length - 2} more item{order.items.length - 2 !== 1 ? "s" : ""}
+              +{order.items.length - 2} more item
+              {order.items.length - 2 !== 1 ? "s" : ""}
             </button>
           )}
           {expanded && order.items.length > 2 && (
@@ -422,13 +440,14 @@ export default function OrdersPage() {
               bg-primary/10 text-primary border border-primary/20 mb-3"
             >
               <Receipt className="w-3 h-3" />
-              My Orders
+              Order History
             </span>
             <h1 className="text-2xl sm:text-4xl font-black text-foreground tracking-tight leading-tight">
               Order History
             </h1>
             <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
-              Your scheduled meals and meal plan subscriptions — all in one place.
+              Your scheduled meals and meal plan subscriptions — all in one
+              place.
             </p>
           </motion.div>
         </div>
@@ -439,7 +458,10 @@ export default function OrdersPage() {
         <div className="flex items-center justify-between gap-3">
           {meta && (
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground">{meta.total}</span> order{meta.total !== 1 ? "s" : ""}
+              <span className="font-semibold text-foreground">
+                {meta.total}
+              </span>{" "}
+              order{meta.total !== 1 ? "s" : ""}
             </p>
           )}
           <button
@@ -459,7 +481,11 @@ export default function OrdersPage() {
           <div className="flex flex-col items-center justify-center py-20 gap-3">
             <AlertCircle className="w-8 h-8 text-destructive" />
             <p className="text-sm text-destructive font-semibold">{error}</p>
-            <Button variant="outline" onClick={() => void load()} className="rounded-xl text-xs">
+            <Button
+              variant="outline"
+              onClick={() => void load()}
+              className="rounded-xl text-xs"
+            >
               Try again
             </Button>
           </div>
@@ -493,7 +519,8 @@ export default function OrdersPage() {
             </div>
             <p className="text-sm font-black text-foreground">No orders yet</p>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
-              Once you schedule meals or subscribe to a meal plan, your orders will appear here.
+              Once you schedule meals or subscribe to a meal plan, your orders
+              will appear here.
             </p>
           </div>
         ) : (
@@ -516,7 +543,9 @@ export default function OrdersPage() {
                     {Math.min(meta.page * meta.limit, meta.total)}
                   </span>{" "}
                   of{" "}
-                  <span className="font-semibold text-foreground">{meta.total}</span>
+                  <span className="font-semibold text-foreground">
+                    {meta.total}
+                  </span>
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -531,7 +560,9 @@ export default function OrdersPage() {
                     {meta.page} / {meta.totalPages}
                   </span>
                   <button
-                    onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))}
+                    onClick={() =>
+                      setPage((p) => Math.min(meta.totalPages, p + 1))
+                    }
                     disabled={!meta.hasNextPage}
                     className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center
                       hover:bg-primary/90 disabled:opacity-40 shadow-md transition-colors"

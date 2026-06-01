@@ -1,30 +1,30 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+// src/middleware.ts
 import { NextRequest, NextResponse } from "next/server";
 
-const isProtectedRoute = createRouteMatcher([
-  "/discover(.*)",
-  "/chef(.*)",
-  "/admin(.*)",
-  "/orders(.*)",
-  "/profile(.*)",
-  "/cart(.*)",
-  "/meal-plans(.*)",
-]);
+const isProtectedRoute = (pathname: string) =>
+  [
+    "/discover",
+    "/chef",
+    "/admin",
+    "/orders",
+    "/profile",
+    "/cart",
+    "/meal-plans",
+  ].some((route) => pathname.startsWith(route));
 
-export default clerkMiddleware(async (_auth, request: NextRequest) => {
+export default function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  if (!isProtectedRoute(request)) {
+  if (!isProtectedRoute(pathname)) {
     return NextResponse.next();
   }
 
   const accessToken = request.cookies.get("access_token")?.value;
 
   if (!accessToken) {
-    // Save where the user was trying to go so we can return them after login
     const returnTo = encodeURIComponent(pathname + search);
     return NextResponse.redirect(
-      new URL(`/auth?returnTo=${returnTo}`, request.url)
+      new URL(`/auth?returnTo=${returnTo}`, request.url),
     );
   }
 
@@ -40,7 +40,11 @@ export default clerkMiddleware(async (_auth, request: NextRequest) => {
     if (isExpired) return NextResponse.next();
 
     // Role protection
-    if (pathname.startsWith("/chef") && role !== "CHEF" && role !== "SUPERADMIN") {
+    if (
+      pathname.startsWith("/chef") &&
+      role !== "CHEF" &&
+      role !== "SUPERADMIN"
+    ) {
       return NextResponse.redirect(new URL("/discover", request.url));
     }
     if (pathname.startsWith("/admin") && role !== "SUPERADMIN") {
@@ -49,15 +53,16 @@ export default clerkMiddleware(async (_auth, request: NextRequest) => {
 
     return NextResponse.next();
   } catch {
+    // Malformed token — clear cookies and redirect to login
     const returnTo = encodeURIComponent(pathname + search);
     const res = NextResponse.redirect(
-      new URL(`/auth?returnTo=${returnTo}`, request.url)
+      new URL(`/auth?returnTo=${returnTo}`, request.url),
     );
     res.cookies.delete("access_token");
     res.cookies.delete("refresh_token");
     return res;
   }
-});
+}
 
 export const config = {
   matcher: [

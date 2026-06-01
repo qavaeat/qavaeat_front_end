@@ -5,7 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { RouteTracker } from "@/components/RouteTracker";
-import { ClerkProvider } from "@clerk/nextjs";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import { FetchInterceptor } from "@/components/FetchInterceptor";
 
 const geist = Geist({
@@ -47,25 +47,22 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <>
-      
-      <ClerkProvider>
-        <html
-          lang="en"
-          suppressHydrationWarning
-          className={`${geist.className}`}
-        >
-          <body className="font-sans antialiased bg-background text-foreground">
-            <ThemeProvider>
-              <FetchInterceptor/>
-              <Toaster position="top-right" richColors />
-              <RouteTracker />
-              {children}
-            </ThemeProvider>
-            <Analytics />
-          </body>
-        </html>
-      </ClerkProvider>
-    </>
+    <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}>
+      <html
+        lang="en"
+        suppressHydrationWarning
+        className={`${geist.className}`}
+      >
+        <body className="font-sans antialiased bg-background text-foreground">
+          <ThemeProvider>
+            <FetchInterceptor />
+            <Toaster position="top-right" richColors />
+            <RouteTracker />
+            {children}
+          </ThemeProvider>
+          <Analytics />
+        </body>
+      </html>
+    </GoogleOAuthProvider>
   );
 }
