@@ -964,57 +964,15 @@ function PaymentWaitingOverlay({
           transition={{ type: "spring", stiffness: 260, damping: 20 }}
           className="flex flex-col items-center gap-5"
         >
-          {/* Animated ring that shrinks as the modal auto-closes */}
-          <div className="relative w-24 h-24 flex items-center justify-center">
-            <svg
-              className="absolute inset-0 w-24 h-24 -rotate-90"
-              viewBox="0 0 96 96"
-            >
-              <circle
-                cx="48"
-                cy="48"
-                r="44"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="4"
-                className="text-emerald-200 dark:text-emerald-900"
-              />
-              <motion.circle
-                cx="48"
-                cy="48"
-                r="44"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 44}`}
-                className="text-emerald-500"
-                initial={{ strokeDashoffset: 0 }}
-                animate={{ strokeDashoffset: 2 * Math.PI * 44 }}
-                transition={{ duration: 1.8, ease: "linear" }}
-              />
-            </svg>
-            <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 18,
-                  delay: 0.1,
-                }}
-              >
-                <CheckCircle2 className="w-9 h-9 text-emerald-500" />
-              </motion.div>
-            </div>
+          <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
           </div>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             <p className="text-lg font-black text-foreground">
               Payment confirmed! 🎉
             </p>
             <p className="text-sm text-muted-foreground">
-              Your meals are locked in. Closing now…
+              Your meals are locked in.
             </p>
           </div>
         </motion.div>
@@ -1127,25 +1085,24 @@ function CheckoutModal({
     onPaymentCompleteRef.current = onPaymentComplete;
   }, [onPaymentComplete]);
 
+  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { pollStatus, secondsLeft, startPolling, reset } = usePaymentStatus(
     useCallback(() => {
-      onPaymentCompleteRef.current();
+      // Let the success animation render before closing
+      autoCloseTimer.current = setTimeout(() => {
+        onPaymentCompleteRef.current();
+      }, 2000);
     }, []),
     useCallback(() => {}, []),
   );
 
-  // Auto-dismiss after a brief success flash so the modal never gets stuck
+  // Clean up the timer if the modal unmounts mid-flight
   useEffect(() => {
-    if (pollStatus !== "complete") return;
-    const t = setTimeout(() => {
-      setWaitingApiRef(null);
-      waitingApiRefSnapshot.current = null;
-      setConfirmedTotal(null);
-      reset();
-      onPaymentCompleteRef.current();
-    }, 1800);
-    return () => clearTimeout(t);
-  }, [pollStatus, reset]);
+    return () => {
+      if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (pollStatus !== "timeout") return;
@@ -4050,7 +4007,7 @@ export default function MyTablePage() {
       duration: 4000,
     });
     clearSeededRef.current?.();
-    setTimeout(() => void loadSchedules(), 400);
+    void loadSchedules();
   }, [loadSchedules]);
 
   const handleCancelPayment = useCallback(
