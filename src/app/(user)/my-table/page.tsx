@@ -310,13 +310,14 @@ function buildDayMealMap(
   const map: Record<string, boolean> = {};
   for (const week of Object.values(saved)) {
     if (!week?.weekKey) continue;
-    const sunday = fromYMD(week.weekKey);
+    // const sunday = fromYMD(week.weekKey);
     // weekKey is the Sunday before the Monday; Monday = sunday + 1 day
-    const monday = localDate(
-      sunday.getFullYear(),
-      sunday.getMonth(),
-      sunday.getDate() + 1,
-    );
+    // const monday = localDate(
+    //   sunday.getFullYear(),
+    //   sunday.getMonth(),
+    //   sunday.getDate() + 1,
+    // );
+    const monday = fromYMD(week.weekKey);
     const dm = normalizeDays(week.days);
     for (const [di, dd] of Object.entries(dm)) {
       if (dd && Object.values(dd).some((m) => m != null)) {
@@ -1124,12 +1125,13 @@ function CheckoutModal({
       .sort((a, b) => a.weekKey.localeCompare(b.weekKey));
 
     for (const week of sorted) {
-      const sun = fromYMD(week.weekKey);
-      const mon = localDate(
-        sun.getFullYear(),
-        sun.getMonth(),
-        sun.getDate() + 1,
-      );
+      // const sun = fromYMD(week.weekKey);
+      // const mon = localDate(
+      //   sun.getFullYear(),
+      //   sun.getMonth(),
+      //   sun.getDate() + 1,
+      // );
+      const mon = fromYMD(week.weekKey);
       const wSun = localDate(
         mon.getFullYear(),
         mon.getMonth(),
@@ -1170,7 +1172,7 @@ function CheckoutModal({
         .reduce((s, { meal }) => s + meal.price * (meal.quantity ?? 1), 0);
       groups.push({
         label: `${mon.getDate()} ${(MONTHS[mon.getMonth()] ?? "").slice(0, 3)} – ${wSun.getDate()} ${(MONTHS[wSun.getMonth()] ?? "").slice(0, 3)}, ${wSun.getFullYear()}`,
-        weekStartSunday: sun,
+        weekStartSunday: mon, // weekKey is Monday, rename mentally to weekStartMonday
         weekKey: week.weekKey,
         days,
         weekTotal: wt,
@@ -1178,18 +1180,25 @@ function CheckoutModal({
     }
 
     if (draftSchedule) {
-      const dsun = fromYMD(draftSchedule.weekKey);
-      const dmon = localDate(
-        dsun.getFullYear(),
-        dsun.getMonth(),
-        dsun.getDate() + 1,
-      );
+      // const dsun = fromYMD(draftSchedule.weekKey);
+      // const dmon = localDate(
+      //   dsun.getFullYear(),
+      //   dsun.getMonth(),
+      //   dsun.getDate() + 1,
+      // );
+      // const dwSun = localDate(
+      //   dmon.getFullYear(),
+      //   dmon.getMonth(),
+      //   dmon.getDate() + 6,
+      // );
+      const dmon = fromYMD(draftSchedule.weekKey);
       const dwSun = localDate(
         dmon.getFullYear(),
         dmon.getMonth(),
         dmon.getDate() + 6,
       );
-      const already = groups.find((g) => sameDay(g.weekStartSunday, dsun));
+      // const already = groups.find((g) => sameDay(g.weekStartSunday, dsun));
+      const already = groups.find((g) => sameDay(g.weekStartSunday, dmon));
       const draftDm = normalizeDays(draftSchedule.schedule);
       const days: CoWeekGroup["days"] = [];
 
@@ -1238,7 +1247,7 @@ function CheckoutModal({
         } else {
           groups.push({
             label: `${dmon.getDate()} ${(MONTHS[dmon.getMonth()] ?? "").slice(0, 3)} – ${dwSun.getDate()} ${(MONTHS[dwSun.getMonth()] ?? "").slice(0, 3)}, ${dwSun.getFullYear()} (new)`,
-            weekStartSunday: dsun,
+            weekStartSunday: dmon,
             weekKey: draftSchedule.weekKey,
             days,
             weekTotal: dwt,
@@ -1591,12 +1600,13 @@ function CheckoutModal({
                   </div>
                   <div className="px-4 py-3 space-y-1.5">
                     {weekGroups.map((g, i) => {
-                      const sun = g.weekStartSunday;
-                      const mon = localDate(
-                        sun.getFullYear(),
-                        sun.getMonth(),
-                        sun.getDate() + 1,
-                      );
+                      // const sun = g.weekStartSunday;
+                      // const mon = localDate(
+                      //   sun.getFullYear(),
+                      //   sun.getMonth(),
+                      //   sun.getDate() + 1,
+                      // );
+                      const mon = g.weekStartSunday;
                       return (
                         <div key={i} className="flex justify-between text-xs">
                           <span className="text-muted-foreground">
@@ -1771,12 +1781,13 @@ function ScheduleManagerModal({
           ) : (
             weeks.map(([wk, week]) => {
               if (!week?.weekKey) return null;
-              const sunday = fromYMD(week.weekKey);
-              const monday = localDate(
-                sunday.getFullYear(),
-                sunday.getMonth(),
-                sunday.getDate() + 1,
-              );
+              // const sunday = fromYMD(week.weekKey);
+              // const monday = localDate(
+              //   sunday.getFullYear(),
+              //   sunday.getMonth(),
+              //   sunday.getDate() + 1,
+              // );
+              const monday = fromYMD(week.weekKey);
               const weekSun = localDate(
                 monday.getFullYear(),
                 monday.getMonth(),
@@ -2076,12 +2087,13 @@ function WalletPanel({
       .filter((w) => !!w?.weekKey)
       .sort((a, b) => b.weekKey.localeCompare(a.weekKey));
     outer: for (const week of sorted) {
-      const sunday = fromYMD(week.weekKey);
-      const monday = localDate(
-        sunday.getFullYear(),
-        sunday.getMonth(),
-        sunday.getDate() + 1,
-      );
+      // const sunday = fromYMD(week.weekKey);
+      // const monday = localDate(
+      //   sunday.getFullYear(),
+      //   sunday.getMonth(),
+      //   sunday.getDate() + 1,
+      // );
+      const monday = fromYMD(week.weekKey);
       const dm = normalizeDays(week.days);
       for (const [di, dm2] of Object.entries(dm)) {
         if (!dm2) continue;
