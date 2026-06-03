@@ -91,6 +91,14 @@ function fromYMD(s: string | null | undefined): Date {
     parseInt(ds ?? "1", 10),
   );
 }
+function mondayFromWeekKey(weekKey: string): Date {
+  const d = fromYMD(weekKey);
+  // Old schedules sent Sunday as weekStartDate → Monday is +1
+  // New schedules send Monday as weekStartDate → it's already Monday
+  return d.getDay() === 0
+    ? localDate(d.getFullYear(), d.getMonth(), d.getDate() + 1)
+    : d;
+}
 function weekStartOf(d: Date): Date {
   const day = d.getDay();
   const daysSinceMonday = day === 0 ? 6 : day - 1;
@@ -310,13 +318,7 @@ function buildDayMealMap(
   const map: Record<string, boolean> = {};
   for (const week of Object.values(saved)) {
     if (!week?.weekKey) continue;
-    const sunday = fromYMD(week.weekKey);
-    // weekKey is the Sunday before the Monday; Monday = sunday + 1 day
-    const monday = localDate(
-      sunday.getFullYear(),
-      sunday.getMonth(),
-      sunday.getDate() + 1,
-    );
+    const monday = mondayFromWeekKey(week.weekKey);
     const dm = normalizeDays(week.days);
     for (const [di, dd] of Object.entries(dm)) {
       if (dd && Object.values(dd).some((m) => m != null)) {
@@ -1167,12 +1169,7 @@ function CheckoutModal({
       .sort((a, b) => a.weekKey.localeCompare(b.weekKey));
 
     for (const week of sorted) {
-      const sun = fromYMD(week.weekKey);
-      const mon = localDate(
-        sun.getFullYear(),
-        sun.getMonth(),
-        sun.getDate() + 1,
-      );
+      const mon = mondayFromWeekKey(week.weekKey);
       const wSun = localDate(
         mon.getFullYear(),
         mon.getMonth(),
@@ -1213,7 +1210,7 @@ function CheckoutModal({
         .reduce((s, { meal }) => s + meal.price * (meal.quantity ?? 1), 0);
       groups.push({
         label: `${mon.getDate()} ${(MONTHS[mon.getMonth()] ?? "").slice(0, 3)} – ${wSun.getDate()} ${(MONTHS[wSun.getMonth()] ?? "").slice(0, 3)}, ${wSun.getFullYear()}`,
-        weekStartSunday: sun,
+        weekStartSunday: mon,
         weekKey: week.weekKey,
         days,
         weekTotal: wt,
@@ -1221,18 +1218,13 @@ function CheckoutModal({
     }
 
     if (draftSchedule) {
-      const dsun = fromYMD(draftSchedule.weekKey);
-      const dmon = localDate(
-        dsun.getFullYear(),
-        dsun.getMonth(),
-        dsun.getDate() + 1,
-      );
+      const dmon = mondayFromWeekKey(draftSchedule.weekKey);
       const dwSun = localDate(
         dmon.getFullYear(),
         dmon.getMonth(),
         dmon.getDate() + 6,
       );
-      const already = groups.find((g) => sameDay(g.weekStartSunday, dsun));
+      const already = groups.find((g) => sameDay(g.weekStartSunday, dmon));
       const draftDm = normalizeDays(draftSchedule.schedule);
       const days: CoWeekGroup["days"] = [];
 
@@ -1281,7 +1273,7 @@ function CheckoutModal({
         } else {
           groups.push({
             label: `${dmon.getDate()} ${(MONTHS[dmon.getMonth()] ?? "").slice(0, 3)} – ${dwSun.getDate()} ${(MONTHS[dwSun.getMonth()] ?? "").slice(0, 3)}, ${dwSun.getFullYear()} (new)`,
-            weekStartSunday: dsun,
+            weekStartSunday: dmon,
             weekKey: draftSchedule.weekKey,
             days,
             weekTotal: dwt,
@@ -1634,12 +1626,7 @@ function CheckoutModal({
                   </div>
                   <div className="px-4 py-3 space-y-1.5">
                     {weekGroups.map((g, i) => {
-                      const sun = g.weekStartSunday;
-                      const mon = localDate(
-                        sun.getFullYear(),
-                        sun.getMonth(),
-                        sun.getDate() + 1,
-                      );
+                      const mon = g.weekStartSunday;
                       return (
                         <div key={i} className="flex justify-between text-xs">
                           <span className="text-muted-foreground">
@@ -1814,12 +1801,7 @@ function ScheduleManagerModal({
           ) : (
             weeks.map(([wk, week]) => {
               if (!week?.weekKey) return null;
-              const sunday = fromYMD(week.weekKey);
-              const monday = localDate(
-                sunday.getFullYear(),
-                sunday.getMonth(),
-                sunday.getDate() + 1,
-              );
+              const monday = mondayFromWeekKey(week.weekKey);
               const weekSun = localDate(
                 monday.getFullYear(),
                 monday.getMonth(),
@@ -2119,12 +2101,7 @@ function WalletPanel({
       .filter((w) => !!w?.weekKey)
       .sort((a, b) => b.weekKey.localeCompare(a.weekKey));
     outer: for (const week of sorted) {
-      const sunday = fromYMD(week.weekKey);
-      const monday = localDate(
-        sunday.getFullYear(),
-        sunday.getMonth(),
-        sunday.getDate() + 1,
-      );
+      const monday = mondayFromWeekKey(week.weekKey);
       const dm = normalizeDays(week.days);
       for (const [di, dm2] of Object.entries(dm)) {
         if (!dm2) continue;
@@ -2456,7 +2433,18 @@ function MyTableViewer({
     [thisWeekStart, todaySelIdx],
   );
 
-  const wk = wkOf(baseWeekStart);
+  const wk = useMemo(() => {
+    const sunKey = wkOf(baseWeekStart); // "2026-05-31"
+    if (savedSchedules[sunKey]) return sunKey;
+    // Fall back to Monday key for schedules created by current client code
+    return toYMD(
+      localDate(
+        baseWeekStart.getFullYear(),
+        baseWeekStart.getMonth(),
+        baseWeekStart.getDate() + 1,
+      ),
+    );
+  }, [baseWeekStart, savedSchedules]);
   const currentSaved = savedSchedules[wk];
   const currentDayMap = useMemo(
     () => (currentSaved ? normalizeDays(currentSaved.days) : {}),
@@ -3203,7 +3191,14 @@ function WeekScheduler({
   // paid/itemStatus fields. The seededKey uses scheduleId so we re-seed
   // whenever the server returns an updated schedule (e.g. after payment).
   useEffect(() => {
-    const existing = savedSchedules[wk];
+    const monKey = toYMD(
+      localDate(
+        baseWeekStart.getFullYear(),
+        baseWeekStart.getMonth(),
+        baseWeekStart.getDate() + 1,
+      ),
+    );
+    const existing = savedSchedules[wk] ?? savedSchedules[monKey];
     if (!existing) return;
 
     // Re-seed whenever scheduleId or the set of days changes
@@ -3829,9 +3824,13 @@ export default function MyTablePage() {
     cancelPayment,
   } = useSchedules();
 
-  
   // In MyTablePage, right after const { savedSchedules } = useSchedules();
-console.log("keys:", Object.keys(savedSchedules), "looking for:", toYMD(weekStartOf(TODAY)));
+  console.log(
+    "keys:",
+    Object.keys(savedSchedules),
+    "looking for:",
+    toYMD(weekStartOf(TODAY)),
+  );
 
   const mounted = !planLoading && !schedulesLoading;
 
