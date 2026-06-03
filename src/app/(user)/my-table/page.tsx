@@ -310,14 +310,13 @@ function buildDayMealMap(
   const map: Record<string, boolean> = {};
   for (const week of Object.values(saved)) {
     if (!week?.weekKey) continue;
-    // const sunday = fromYMD(week.weekKey);
+    const sunday = fromYMD(week.weekKey);
     // weekKey is the Sunday before the Monday; Monday = sunday + 1 day
-    // const monday = localDate(
-    //   sunday.getFullYear(),
-    //   sunday.getMonth(),
-    //   sunday.getDate() + 1,
-    // );
-    const monday = fromYMD(week.weekKey);
+    const monday = localDate(
+      sunday.getFullYear(),
+      sunday.getMonth(),
+      sunday.getDate() + 1,
+    );
     const dm = normalizeDays(week.days);
     for (const [di, dd] of Object.entries(dm)) {
       if (dd && Object.values(dd).some((m) => m != null)) {
@@ -965,15 +964,57 @@ function PaymentWaitingOverlay({
           transition={{ type: "spring", stiffness: 260, damping: 20 }}
           className="flex flex-col items-center gap-5"
         >
-          <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
-            <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+          {/* Animated ring that shrinks as the modal auto-closes */}
+          <div className="relative w-24 h-24 flex items-center justify-center">
+            <svg
+              className="absolute inset-0 w-24 h-24 -rotate-90"
+              viewBox="0 0 96 96"
+            >
+              <circle
+                cx="48"
+                cy="48"
+                r="44"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="4"
+                className="text-emerald-200 dark:text-emerald-900"
+              />
+              <motion.circle
+                cx="48"
+                cy="48"
+                r="44"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 44}`}
+                className="text-emerald-500"
+                initial={{ strokeDashoffset: 0 }}
+                animate={{ strokeDashoffset: 2 * Math.PI * 44 }}
+                transition={{ duration: 1.8, ease: "linear" }}
+              />
+            </svg>
+            <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 18,
+                  delay: 0.1,
+                }}
+              >
+                <CheckCircle2 className="w-9 h-9 text-emerald-500" />
+              </motion.div>
+            </div>
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <p className="text-lg font-black text-foreground">
               Payment confirmed! 🎉
             </p>
             <p className="text-sm text-muted-foreground">
-              Your meals are locked in.
+              Your meals are locked in. Closing now…
             </p>
           </div>
         </motion.div>
@@ -1086,24 +1127,25 @@ function CheckoutModal({
     onPaymentCompleteRef.current = onPaymentComplete;
   }, [onPaymentComplete]);
 
-  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const { pollStatus, secondsLeft, startPolling, reset } = usePaymentStatus(
     useCallback(() => {
-      // Let the success animation render before closing
-      autoCloseTimer.current = setTimeout(() => {
-        onPaymentCompleteRef.current();
-      }, 2000);
+      onPaymentCompleteRef.current();
     }, []),
     useCallback(() => {}, []),
   );
 
-  // Clean up the timer if the modal unmounts mid-flight
+  // Auto-dismiss after a brief success flash so the modal never gets stuck
   useEffect(() => {
-    return () => {
-      if (autoCloseTimer.current) clearTimeout(autoCloseTimer.current);
-    };
-  }, []);
+    if (pollStatus !== "complete") return;
+    const t = setTimeout(() => {
+      setWaitingApiRef(null);
+      waitingApiRefSnapshot.current = null;
+      setConfirmedTotal(null);
+      reset();
+      onPaymentCompleteRef.current();
+    }, 1800);
+    return () => clearTimeout(t);
+  }, [pollStatus, reset]);
 
   useEffect(() => {
     if (pollStatus !== "timeout") return;
@@ -1125,13 +1167,12 @@ function CheckoutModal({
       .sort((a, b) => a.weekKey.localeCompare(b.weekKey));
 
     for (const week of sorted) {
-      // const sun = fromYMD(week.weekKey);
-      // const mon = localDate(
-      //   sun.getFullYear(),
-      //   sun.getMonth(),
-      //   sun.getDate() + 1,
-      // );
-      const mon = fromYMD(week.weekKey);
+      const sun = fromYMD(week.weekKey);
+      const mon = localDate(
+        sun.getFullYear(),
+        sun.getMonth(),
+        sun.getDate() + 1,
+      );
       const wSun = localDate(
         mon.getFullYear(),
         mon.getMonth(),
@@ -1172,7 +1213,7 @@ function CheckoutModal({
         .reduce((s, { meal }) => s + meal.price * (meal.quantity ?? 1), 0);
       groups.push({
         label: `${mon.getDate()} ${(MONTHS[mon.getMonth()] ?? "").slice(0, 3)} – ${wSun.getDate()} ${(MONTHS[wSun.getMonth()] ?? "").slice(0, 3)}, ${wSun.getFullYear()}`,
-        weekStartSunday: mon, // weekKey is Monday, rename mentally to weekStartMonday
+        weekStartSunday: sun,
         weekKey: week.weekKey,
         days,
         weekTotal: wt,
@@ -1180,25 +1221,18 @@ function CheckoutModal({
     }
 
     if (draftSchedule) {
-      // const dsun = fromYMD(draftSchedule.weekKey);
-      // const dmon = localDate(
-      //   dsun.getFullYear(),
-      //   dsun.getMonth(),
-      //   dsun.getDate() + 1,
-      // );
-      // const dwSun = localDate(
-      //   dmon.getFullYear(),
-      //   dmon.getMonth(),
-      //   dmon.getDate() + 6,
-      // );
-      const dmon = fromYMD(draftSchedule.weekKey);
+      const dsun = fromYMD(draftSchedule.weekKey);
+      const dmon = localDate(
+        dsun.getFullYear(),
+        dsun.getMonth(),
+        dsun.getDate() + 1,
+      );
       const dwSun = localDate(
         dmon.getFullYear(),
         dmon.getMonth(),
         dmon.getDate() + 6,
       );
-      // const already = groups.find((g) => sameDay(g.weekStartSunday, dsun));
-      const already = groups.find((g) => sameDay(g.weekStartSunday, dmon));
+      const already = groups.find((g) => sameDay(g.weekStartSunday, dsun));
       const draftDm = normalizeDays(draftSchedule.schedule);
       const days: CoWeekGroup["days"] = [];
 
@@ -1247,7 +1281,7 @@ function CheckoutModal({
         } else {
           groups.push({
             label: `${dmon.getDate()} ${(MONTHS[dmon.getMonth()] ?? "").slice(0, 3)} – ${dwSun.getDate()} ${(MONTHS[dwSun.getMonth()] ?? "").slice(0, 3)}, ${dwSun.getFullYear()} (new)`,
-            weekStartSunday: dmon,
+            weekStartSunday: dsun,
             weekKey: draftSchedule.weekKey,
             days,
             weekTotal: dwt,
@@ -1600,13 +1634,12 @@ function CheckoutModal({
                   </div>
                   <div className="px-4 py-3 space-y-1.5">
                     {weekGroups.map((g, i) => {
-                      // const sun = g.weekStartSunday;
-                      // const mon = localDate(
-                      //   sun.getFullYear(),
-                      //   sun.getMonth(),
-                      //   sun.getDate() + 1,
-                      // );
-                      const mon = g.weekStartSunday;
+                      const sun = g.weekStartSunday;
+                      const mon = localDate(
+                        sun.getFullYear(),
+                        sun.getMonth(),
+                        sun.getDate() + 1,
+                      );
                       return (
                         <div key={i} className="flex justify-between text-xs">
                           <span className="text-muted-foreground">
@@ -1781,13 +1814,12 @@ function ScheduleManagerModal({
           ) : (
             weeks.map(([wk, week]) => {
               if (!week?.weekKey) return null;
-              // const sunday = fromYMD(week.weekKey);
-              // const monday = localDate(
-              //   sunday.getFullYear(),
-              //   sunday.getMonth(),
-              //   sunday.getDate() + 1,
-              // );
-              const monday = fromYMD(week.weekKey);
+              const sunday = fromYMD(week.weekKey);
+              const monday = localDate(
+                sunday.getFullYear(),
+                sunday.getMonth(),
+                sunday.getDate() + 1,
+              );
               const weekSun = localDate(
                 monday.getFullYear(),
                 monday.getMonth(),
@@ -2087,13 +2119,12 @@ function WalletPanel({
       .filter((w) => !!w?.weekKey)
       .sort((a, b) => b.weekKey.localeCompare(a.weekKey));
     outer: for (const week of sorted) {
-      // const sunday = fromYMD(week.weekKey);
-      // const monday = localDate(
-      //   sunday.getFullYear(),
-      //   sunday.getMonth(),
-      //   sunday.getDate() + 1,
-      // );
-      const monday = fromYMD(week.weekKey);
+      const sunday = fromYMD(week.weekKey);
+      const monday = localDate(
+        sunday.getFullYear(),
+        sunday.getMonth(),
+        sunday.getDate() + 1,
+      );
       const dm = normalizeDays(week.days);
       for (const [di, dm2] of Object.entries(dm)) {
         if (!dm2) continue;
@@ -3781,7 +3812,7 @@ function WeekScheduler({
 export default function MyTablePage() {
   const TODAY = getToday();
 
-  const thisWeekStart = useMemo(() => weekStartOf(TODAY), []);
+  const thisWeekStart = weekStartOf(TODAY);
 
   const { loading: planLoading } = usePlan();
   const {
@@ -3797,6 +3828,10 @@ export default function MyTablePage() {
     customerPhone,
     cancelPayment,
   } = useSchedules();
+
+  
+  // In MyTablePage, right after const { savedSchedules } = useSchedules();
+console.log("keys:", Object.keys(savedSchedules), "looking for:", toYMD(weekStartOf(TODAY)));
 
   const mounted = !planLoading && !schedulesLoading;
 
@@ -4019,7 +4054,7 @@ export default function MyTablePage() {
       duration: 4000,
     });
     clearSeededRef.current?.();
-    void loadSchedules();
+    setTimeout(() => void loadSchedules(), 400);
   }, [loadSchedules]);
 
   const handleCancelPayment = useCallback(
