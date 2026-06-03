@@ -3345,6 +3345,32 @@ function WeekScheduler({
     );
   }, [baseWeekStart, setBaseWeekStart]);
 
+  // const {
+  //   newMealsThisWeek,
+  //   newMealsTotal,
+  //   otherUnpaidTotal,
+  //   combinedTotal,
+  //   combinedCount,
+  // } = useMemo(() => {
+  //   const nm = mealsInDayMap(schedule).filter((m) => m.paid !== true);
+  //   const nt = nm.reduce((s, m) => s + m.price * (m.quantity ?? 1), 0);
+  //   const ou = Object.entries(savedSchedules)
+  //     .filter(([k]) => k !== wk)
+  //     .flatMap(([, w]) =>
+  //       w?.days
+  //         ? mealsInDayMap(normalizeDays(w.days)).filter((m) => m.paid !== true)
+  //         : [],
+  //     );
+  //   const ot = ou.reduce((s, m) => s + m.price * (m.quantity ?? 1), 0);
+  //   return {
+  //     newMealsThisWeek: nm,
+  //     newMealsTotal: nt,
+  //     otherUnpaidTotal: ot,
+  //     combinedTotal: nt + ot,
+  //     combinedCount: nm.length + ou.length,
+  //   };
+  // }, [savedSchedules, wk, schedule]);
+
   const {
     newMealsThisWeek,
     newMealsTotal,
@@ -3354,8 +3380,18 @@ function WeekScheduler({
   } = useMemo(() => {
     const nm = mealsInDayMap(schedule).filter((m) => m.paid !== true);
     const nt = nm.reduce((s, m) => s + m.price * (m.quantity ?? 1), 0);
+
+    // Exclude BOTH the Sunday key and the Monday key for the current week
+    const monKey = toYMD(
+      localDate(
+        baseWeekStart.getFullYear(),
+        baseWeekStart.getMonth(),
+        baseWeekStart.getDate() + 1,
+      ),
+    );
+
     const ou = Object.entries(savedSchedules)
-      .filter(([k]) => k !== wk)
+      .filter(([k]) => k !== wk && k !== monKey)
       .flatMap(([, w]) =>
         w?.days
           ? mealsInDayMap(normalizeDays(w.days)).filter((m) => m.paid !== true)
@@ -3369,11 +3405,8 @@ function WeekScheduler({
       combinedTotal: nt + ot,
       combinedCount: nm.length + ou.length,
     };
-  }, [savedSchedules, wk, schedule]);
+  }, [savedSchedules, wk, schedule, baseWeekStart]);
 
-  // FIX: dayMealMap for the scheduler dot indicators — built from both
-  // saved schedules AND the current in-progress schedule state so dots
-  // appear as soon as a meal is assigned even before save.
   const savedDayMealMap = useMemo(
     () => buildDayMealMap(savedSchedules),
     [savedSchedules],
