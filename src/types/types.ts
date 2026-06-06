@@ -15,12 +15,12 @@ export interface KitchenData {
   kitchenPhotoUrl: string | null;
   menuPhotoUrl: string | null;
   location: string;
-  latitude: number | null;      // ← new: from useLocation hook
-  longitude: number | null;     // ← new: from useLocation hook
-  areasOfService: string;       // comma-separated ServiceType values
-  foodSpecialty: string;        // ← new: comma-separated e.g. "Kenyan,BBQ"
-  availability: string;         // ← new: comma-separated DayOfWeek values
-  yearsOfExperience: number;    // ← new
+  latitude: number | null;      
+  longitude: number | null;     
+  areasOfService: string;       
+  foodSpecialty: string;        
+  availability: string;         
+  yearsOfExperience: number;    
 }
 
 export interface VerificationData {

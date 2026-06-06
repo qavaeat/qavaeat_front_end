@@ -13,7 +13,7 @@ export function Navbar() {
 
   const navItems = [
     { label: "HOME", href: "/" },
-    { label: "MENU", href: "/menu" },
+    { label: "OUR CHEFS", href: "/menu" },
     { label: "NEWS", href: "/news" },
     { label: "FAQS", href: "/faq" },
     { label: "CONTACT US", href: "/contact" },

@@ -104,11 +104,16 @@ function Avatar({
       className={`w-${size} h-${size} rounded-full overflow-hidden bg-muted border-2 border-secondary flex-shrink-0 flex items-center justify-center`}
     >
       {avatarUrl ? (
-        <Image
+        // <Image
+        //   src={avatarUrl}
+        //   alt={displayName}
+        //   width={32}
+        //   height={32}
+        //   className="object-cover w-full h-full"
+        // />
+        <img
           src={avatarUrl}
           alt={displayName}
-          width={32}
-          height={32}
           className="object-cover w-full h-full"
         />
       ) : (
@@ -167,9 +172,13 @@ export function UserNav({
     setLoggingOut(true);
     try {
       await fetch("/api/auth/logout", { method: "POST" });
-      clearPlan();
+      // clearPlan();
+
+      sessionStorage.removeItem("returnTo");
+      sessionStorage.removeItem("lastRoute");
+
       toast.success("Logged out successfully.");
-      router.push("/auth");
+      router.replace("/auth");
     } catch {
       toast.error("Logout failed. Please try again.");
     } finally {
@@ -254,7 +263,7 @@ export function UserNav({
           <div className="flex items-center gap-1 sm:gap-2" ref={desktopRef}>
             {/* Notifications */}
             <div className="relative">
-              <button
+              {/* <button
                 onClick={() => {
                   setNotifOpen((p) => !p);
                   setDropdownOpen(false);
@@ -268,7 +277,7 @@ export function UserNav({
                     {notificationCount}
                   </span>
                 )}
-              </button>
+              </button> */}
 
               <AnimatePresence>
                 {notifOpen && (
@@ -344,14 +353,14 @@ export function UserNav({
                         {user?.email}
                       </p>
                     </div>
-                    <Link
+                    {/* <Link
                       href="/wallet"
                       onClick={() => setDropdownOpen(false)}
                       className="flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
                     >
                       <Wallet className="w-4 h-4 text-muted-foreground" />
                       Wallet &amp; Payments
-                    </Link>
+                    </Link> */}
                     <Link
                       href="/settings"
                       onClick={() => setDropdownOpen(false)}

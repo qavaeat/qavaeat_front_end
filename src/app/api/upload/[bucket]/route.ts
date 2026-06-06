@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase-server";
 
@@ -7,13 +6,14 @@ const ALLOWED_BUCKETS = [
   "chef-kitchens",
   "chef-menus",
   "chef-documents",
+  "user-avatars",
 ];
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ bucket: string }> }  // 👈 now a Promise
+  { params }: { params: Promise<{ bucket: string }> },
 ) {
-  const { bucket } = await params;  // 👈 await it
+  const { bucket } = await params;
 
   if (!ALLOWED_BUCKETS.includes(bucket)) {
     return NextResponse.json({ error: "Invalid bucket" }, { status: 400 });

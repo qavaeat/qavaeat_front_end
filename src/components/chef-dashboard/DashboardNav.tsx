@@ -86,7 +86,7 @@ export function DashboardNav({ activeTab, onTabChange }: Props) {
         <div className="flex items-center gap-3" ref={dropdownRef}>
           {/* Bell */}
           <div className="relative">
-            <button
+            {/* <button
               onClick={() => {
                 setNotifOpen((p) => !p);
                 setDropdownOpen(false);
@@ -95,7 +95,7 @@ export function DashboardNav({ activeTab, onTabChange }: Props) {
             >
               <Bell className="w-5 h-5 text-foreground" />
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-primary" />
-            </button>
+            </button> */}
             <AnimatePresence>
               {notifOpen && (
                 <motion.div
@@ -146,11 +146,16 @@ export function DashboardNav({ activeTab, onTabChange }: Props) {
             >
               <div className="w-8 h-8 rounded-full overflow-hidden bg-muted border-2 border-secondary flex items-center justify-center flex-shrink-0">
                 {avatarUrl ? (
-                  <Image
+                  // <Image
+                  //   src={avatarUrl}
+                  //   alt={displayName}
+                  //   width={32}
+                  //   height={32}
+                  //   className="object-cover w-full h-full"
+                  // />
+                  <img
                     src={avatarUrl}
                     alt={displayName}
-                    width={32}
-                    height={32}
                     className="object-cover w-full h-full"
                   />
                 ) : (

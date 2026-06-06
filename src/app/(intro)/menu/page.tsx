@@ -1,471 +1,578 @@
 "use client";
+
+// src/app/(intro)/menu/page.tsx
+// Displays all approved chefs on a paginated grid.
+
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
+import { Input } from "@/components/ui/input";
 import {
-  Clock, ChevronLeft, ChevronRight,
-  CalendarDays, UtensilsCrossed, Flame,
-  Truck, ShoppingBag, Users, CheckCircle2,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
+  Truck,
+  ShoppingBag,
+  UtensilsCrossed,
+  CalendarDays,
+  ChefHat,
+  Search,
 } from "lucide-react";
-import type { MenuItem, MealPlan, PaginationMeta } from "@/types/menu";
 
-// ── Types ──────────────────────────────────────────────
-type MenuTab = "daily" | "plans";
-type MealFilter = "All" | "Breakfast" | "Lunch" | "Dinner";
+// ── Types ──────────────────────────────────────────────────────────────
 
-function applyMealFilter(items: MenuItem[], filter: MealFilter): MenuItem[] {
-  if (filter === "All") return items;
-  return items.filter((item) => item.mealTimes.includes(filter.toUpperCase()));
+interface BusinessHour {
+  day: string;
+  openTime: string;
+  closeTime: string;
+  isClosed: boolean;
 }
 
-// ── Shimmer skeleton ───────────────────────────────────
+interface Chef {
+  id: string;
+  name: string;
+  description: string | null;
+  logoUrl: string | null;
+  city: string;
+  state: string;
+  country: string;
+  foodSpecialty: string[];
+  services: string[];
+  availability: string[];
+  yearsOfExperience: number;
+  businessHours: BusinessHour[];
+  isOpen: boolean;
+  averageRating: number | null;
+  chef: {
+    profile: {
+      firstName: string | null;
+      lastName: string | null;
+      avatarUrl: string | null;
+    } | null;
+  };
+  _count: {
+    menuItems: number;
+    mealPlans: number;
+    reviews: number;
+  };
+}
+
+interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasPrevPage: boolean;
+  hasNextPage: boolean;
+}
+
+// ── Avatar ─────────────────────────────────────────────────────────────
+
+function Avatar({ src, name }: { src?: string | null; name: string }) {
+  const initials = name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        className="w-20 h-20 sm:w-[88px] sm:h-[88px] rounded-full object-cover border-[3px] border-white/30"
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-20 h-20 sm:w-[88px] sm:h-[88px] rounded-full flex items-center justify-center font-black text-2xl sm:text-3xl text-white border-[3px] border-white/20"
+      style={{
+        background: "linear-gradient(135deg, var(--primary), var(--chart-5))",
+      }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+// ── Star row ───────────────────────────────────────────────────────────
+
+function Stars({ rating, count }: { rating: number | null; count: number }) {
+  if (!rating) return null;
+  const filled = Math.round(rating);
+  return (
+    <div className="flex items-center gap-1">
+      <div className="flex gap-px">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <svg
+            key={i}
+            className="w-3 h-3"
+            viewBox="0 0 20 20"
+            fill={i <= filled ? "var(--secondary)" : "var(--muted)"}
+          >
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+          </svg>
+        ))}
+      </div>
+      <span className="text-[10px] text-muted-foreground">
+        {rating} <span className="opacity-60">({count})</span>
+      </span>
+    </div>
+  );
+}
+
+// ── Shimmer skeleton ───────────────────────────────────────────────────
+
 function ShimmerCard() {
   return (
-    <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm flex flex-col animate-pulse">
-      <div className="w-full aspect-[4/3] bg-muted relative overflow-hidden">
-        <div className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-foreground/5 to-transparent" />
-      </div>
-      <div className="p-3 flex flex-col gap-2.5">
-        <div className="flex justify-between gap-2">
-          <div className="h-3.5 bg-muted rounded-full w-3/5" />
-          <div className="h-3.5 bg-muted rounded-full w-1/5" />
+    <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden animate-pulse">
+      <div className="h-1 w-full bg-muted" />
+      <div className="p-3 sm:p-4 flex flex-col items-center gap-3">
+        <div className="w-20 h-20 rounded-full bg-muted" />
+        <div className="w-full space-y-2 flex flex-col items-center">
+          <div className="h-3.5 bg-muted rounded-full w-3/4" />
+          <div className="h-2.5 bg-muted rounded-full w-1/2" />
+          <div className="h-2.5 bg-muted rounded-full w-2/3" />
         </div>
-        <div className="h-2.5 bg-muted rounded-full w-full" />
-        <div className="h-2.5 bg-muted rounded-full w-4/5" />
-        <div className="flex gap-1.5 mt-1">
-          <div className="h-5 bg-muted rounded-full w-12" />
-          <div className="h-5 bg-muted rounded-full w-16" />
+        <div className="flex gap-1.5">
+          <div className="h-5 w-16 bg-muted rounded-full" />
+          <div className="h-5 w-14 bg-muted rounded-full" />
         </div>
+        <div className="h-8 bg-muted rounded-xl w-full" />
       </div>
     </div>
   );
 }
 
-// ── Menu Item Card ─────────────────────────────────────
-function MenuItemCard({ item, index }: { item: MenuItem; index: number }) {
+// ── Chef Card ──────────────────────────────────────────────────────────
+
+const SERVICE_META: Record<string, { icon: React.ReactNode; label: string }> = {
+  DELIVERY: { icon: <Truck className="w-2.5 h-2.5" />, label: "Delivery" },
+  PICKUP: { icon: <ShoppingBag className="w-2.5 h-2.5" />, label: "Pickup" },
+  DINE_IN: {
+    icon: <UtensilsCrossed className="w-2.5 h-2.5" />,
+    label: "Dine-in",
+  },
+};
+
+function ChefCard({ chef, index }: { chef: Chef; index: number }) {
+  const router = useRouter();
+  const profile = chef.chef?.profile;
+  const chefName =
+    [profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || "Chef";
+  const avatarSrc = chef.logoUrl ?? profile?.avatarUrl;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-20px" }}
-      transition={{ duration: 0.4, delay: (index % 4) * 0.06 }}
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col"
+      transition={{ duration: 0.38, delay: (index % 4) * 0.06 }}
+      whileHover={{ y: -4, transition: { duration: 0.18 } }}
+      className="bg-card rounded-2xl border border-border shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col overflow-hidden"
     >
-      <div className="relative w-full aspect-[4/3] bg-muted overflow-hidden flex-shrink-0">
-        {item.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-3xl sm:text-4xl bg-gradient-to-br from-muted to-muted/60">
-            🍽️
+      {/* Open/Closed colour strip at top */}
+      <div
+        className="h-1 w-full flex-shrink-0 transition-colors duration-500"
+        style={{ background: chef.isOpen ? "#22c55e" : "var(--muted)" }}
+      />
+
+      <div className="p-3 sm:p-4 flex flex-col items-center gap-2 sm:gap-2.5 flex-1">
+        {/* Avatar + live badge */}
+        <div className="relative mt-1">
+          <Avatar src={avatarSrc} name={chef.name} />
+          <span
+            className="absolute -bottom-1 -right-1 text-[8px] font-black px-1.5 py-[3px] rounded-full border-2 border-card whitespace-nowrap leading-none"
+            style={
+              chef.isOpen
+                ? { background: "#22c55e", color: "#fff" }
+                : {
+                    background: "var(--muted)",
+                    color: "var(--muted-foreground)",
+                  }
+            }
+          >
+            {chef.isOpen ? "● Open" : "● Closed"}
+          </span>
+        </div>
+
+        {/* Chef name first, then business name */}
+        <div className="text-center space-y-0.5">
+          <p className="text-xs sm:text-sm font-black text-card-foreground leading-tight line-clamp-1">
+            {chefName}
+          </p>
+          <p className="text-[10px] text-muted-foreground">{chef.name}</p>
+        </div>
+
+        {/* Stars */}
+        <Stars rating={chef.averageRating} count={chef._count.reviews} />
+
+        {/* Location */}
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground max-w-full">
+          <MapPin className="w-3 h-3 flex-shrink-0 text-primary" />
+          <span className="truncate">
+            {[chef.city, chef.state].filter(Boolean).join(", ")}
+          </span>
+        </div>
+
+        {/* Services */}
+        {chef.services.length > 0 && (
+          <div className="flex flex-wrap gap-1 justify-center">
+            {chef.services.map((s) => {
+              const m = SERVICE_META[s];
+              if (!m) return null;
+              return (
+                <span
+                  key={s}
+                  className="flex items-center gap-0.5 text-[9px] font-semibold px-1.5 py-[3px] rounded-full bg-primary/10 text-primary border border-primary/20"
+                >
+                  {m.icon} {m.label}
+                </span>
+              );
+            })}
           </div>
         )}
-        {item.quantity > 0 && item.quantity <= 3 && (
-          <span className="absolute top-2 right-2 text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary text-primary-foreground shadow-sm">
-            Only {item.quantity} left
-          </span>
-        )}
-      </div>
 
-      <div className="p-2.5 sm:p-3 flex flex-col gap-1.5 sm:gap-2 flex-1">
-        <div className="flex items-start justify-between gap-1.5">
-          <p className="text-xs sm:text-sm font-bold text-card-foreground leading-tight flex-1 line-clamp-1">
-            {item.name}
-          </p>
-          <p className="text-xs sm:text-sm font-black text-primary whitespace-nowrap flex-shrink-0">
-            Ksh {Number(item.price).toLocaleString()}
-          </p>
-        </div>
-
-        {item.description && (
-          <p className="text-[10px] sm:text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
-            {item.description}
-          </p>
-        )}
-
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
-          {item.calories != null && (
-            <span className="flex items-center gap-0.5">
-              <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-primary" />
-              {item.calories} kcal
-            </span>
-          )}
-          {item.prepTimeMin != null && (
-            <span className="flex items-center gap-0.5">
-              <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-              {item.prepTimeMin} min
-            </span>
-          )}
-        </div>
-
-        {item.tags.length > 0 && (
-          <div className="flex items-center gap-1 flex-wrap">
-            {item.tags.slice(0, 3).map((tag) => (
+        {/* Specialties */}
+        {chef.foodSpecialty.length > 0 && (
+          <div className="flex flex-wrap gap-1 justify-center">
+            {chef.foodSpecialty.slice(0, 2).map((f) => (
               <span
-                key={tag}
-                className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-secondary/20 text-secondary-foreground"
+                key={f}
+                className="text-[9px] px-1.5 py-[3px] rounded-full bg-secondary/20 text-secondary-foreground font-medium"
               >
-                #{tag}
+                {f}
               </span>
             ))}
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-// ── Meal Plan Card ─────────────────────────────────────
-function MealPlanCard({ plan, index }: { plan: MealPlan; index: number }) {
-  const mealNames = [...new Set(plan.meals.map((m) => m.menuItem.name))].slice(0, 3);
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-20px" }}
-      transition={{ duration: 0.4, delay: (index % 4) * 0.06 }}
-      whileHover={{ y: -4, transition: { duration: 0.2 } }}
-      className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow flex flex-col"
-    >
-      <div className="relative w-full aspect-[4/3] bg-muted overflow-hidden flex-shrink-0">
-        {plan.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={plan.imageUrl} alt={plan.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-3xl sm:text-4xl bg-gradient-to-br from-muted to-muted/60">
-            🥗
-          </div>
-        )}
-        {plan.isFeatured && (
-          <span className="absolute top-2 left-2 text-[9px] font-black px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground shadow-sm">
-            ⭐ Featured
-          </span>
-        )}
-        <span className="absolute bottom-2 right-2 text-[10px] sm:text-[11px] font-black px-2 sm:px-2.5 py-1 rounded-xl bg-card/90 backdrop-blur-sm text-primary shadow-sm">
-          {plan.currency} {Number(plan.price).toLocaleString()}
-        </span>
-      </div>
-
-      <div className="p-2.5 sm:p-3 flex flex-col gap-1.5 sm:gap-2 flex-1">
-        <p className="text-xs sm:text-sm font-bold text-card-foreground leading-tight line-clamp-1">
-          {plan.name}
-        </p>
-
-        {plan.description && (
-          <p className="text-[10px] sm:text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
-            {plan.description}
-          </p>
-        )}
-
-        {mealNames.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {mealNames.map((name) => (
-              <span key={name} className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-                {name}
-              </span>
-            ))}
-            {plan.meals.length > 3 && (
-              <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-                +{plan.meals.length - 3} more
+            {chef.foodSpecialty.length > 2 && (
+              <span className="text-[9px] px-1.5 py-[3px] rounded-full bg-muted text-muted-foreground font-medium">
+                +{chef.foodSpecialty.length - 2}
               </span>
             )}
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] text-muted-foreground flex-wrap">
+        {/* Stat pills */}
+        <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-muted-foreground justify-center flex-wrap">
           <span className="flex items-center gap-0.5">
-            <CalendarDays className="w-2.5 h-2.5 sm:w-3 sm:h-3" />{plan.durationDays}d
+            <UtensilsCrossed className="w-2.5 h-2.5" />
+            {chef._count.menuItems} items
           </span>
           <span className="text-border">·</span>
           <span className="flex items-center gap-0.5">
-            <UtensilsCrossed className="w-2.5 h-2.5 sm:w-3 sm:h-3" />{plan.totalMeals} meals
+            <CalendarDays className="w-2.5 h-2.5" />
+            {chef._count.mealPlans} plans
           </span>
-          <span className="text-border">·</span>
-          <span className="flex items-center gap-0.5">
-            <Users className="w-2.5 h-2.5 sm:w-3 sm:h-3" />{plan.currentSubscribers}
-          </span>
-        </div>
-
-        <div className="flex gap-1 sm:gap-1.5 flex-wrap">
-          {plan.isDeliveryAvailable && (
-            <span className="flex items-center gap-0.5 text-[9px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-              <Truck className="w-2 h-2 sm:w-2.5 sm:h-2.5" /> Delivery
-            </span>
-          )}
-          {plan.isPickupAvailable && (
-            <span className="flex items-center gap-0.5 text-[9px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-secondary/20 text-secondary-foreground border border-secondary/30">
-              <ShoppingBag className="w-2 h-2 sm:w-2.5 sm:h-2.5" /> Pickup
-            </span>
-          )}
-        </div>
-
-        {plan.cuisineType.length > 0 && (
-          <div className="flex gap-1 flex-wrap">
-            {plan.cuisineType.slice(0, 2).map((c) => (
-              <span key={c} className="text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                {c}
+          {chef.yearsOfExperience > 0 && (
+            <>
+              <span className="text-border">·</span>
+              <span className="flex items-center gap-0.5">
+                <ChefHat className="w-2.5 h-2.5" />
+                {chef.yearsOfExperience}y exp
               </span>
-            ))}
-          </div>
-        )}
+            </>
+          )}
+        </div>
 
-        {plan.availableDays.length > 0 && (
-          <div className="flex items-center gap-1 flex-wrap">
-            <CheckCircle2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-primary flex-shrink-0" />
-            <span className="text-[9px] sm:text-[10px] text-muted-foreground">
-              {plan.availableDays.map((d) => d.slice(0, 3)).join(", ")}
-            </span>
-          </div>
-        )}
+        {/* Push CTA to bottom */}
+        <div className="flex-1" />
 
-        <p className="text-[9px] sm:text-[10px] text-muted-foreground/70 mt-auto pt-1">
-          by {plan.business.name} · {plan.business.city}
-        </p>
+        {/* View Kitchen CTA */}
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => router.push(`/kitchen/${chef.id}`)}
+          className="w-full py-2 sm:py-2.5 rounded-xl text-[11px] sm:text-xs font-black text-primary-foreground shadow-md hover:shadow-lg hover:opacity-90 transition-all duration-150 mt-1"
+          style={{ background: "var(--primary)" }}
+        >
+          View Kitchen
+        </motion.button>
       </div>
     </motion.div>
   );
 }
 
-// ── Pagination ─────────────────────────────────────────
+// ── Pagination ─────────────────────────────────────────────────────────
+
 function Pagination({
   meta,
-  onPageChange,
+  onChange,
 }: {
   meta: PaginationMeta;
-  onPageChange: (p: number) => void;
+  onChange: (p: number) => void;
 }) {
   if (meta.totalPages <= 1) return null;
 
-  const getPages = (): (number | "...")[] => {
-    const { page, totalPages } = meta;
-    const pages: (number | "...")[] = [];
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (page > 3) pages.push("...");
-      for (let i = Math.max(2, page - 1); i <= Math.min(totalPages - 1, page + 1); i++) pages.push(i);
-      if (page < totalPages - 2) pages.push("...");
-      pages.push(totalPages);
-    }
-    return pages;
-  };
+  const pages: (number | "...")[] = [];
+  const { page, totalPages } = meta;
+
+  if (totalPages <= 5) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (page > 3) pages.push("...");
+    for (
+      let i = Math.max(2, page - 1);
+      i <= Math.min(totalPages - 1, page + 1);
+      i++
+    )
+      pages.push(i);
+    if (page < totalPages - 2) pages.push("...");
+    pages.push(totalPages);
+  }
+
+  const btnBase =
+    "w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm";
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       whileInView={{ opacity: 1 }}
       viewport={{ once: true }}
-      className="flex items-center justify-center gap-1 sm:gap-1.5 pb-8 flex-wrap"
+      className="flex items-center justify-center gap-1 sm:gap-1.5 flex-wrap pb-8"
     >
-      <motion.button
-        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-        onClick={() => onPageChange(meta.page - 1)}
+      <button
+        onClick={() => onChange(page - 1)}
         disabled={!meta.hasPrevPage}
-        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-md"
+        className={btnBase}
+        style={{
+          background: "var(--primary)",
+          color: "var(--primary-foreground)",
+        }}
       >
-        <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-      </motion.button>
+        <ChevronLeft className="w-4 h-4" />
+      </button>
 
-      {getPages().map((p, i) =>
+      {pages.map((p, i) =>
         p === "..." ? (
-          <span key={`ellipsis-${i}`} className="text-white/60 px-0.5 text-sm select-none">…</span>
+          <span
+            key={`e-${i}`}
+            className="text-white/60 text-sm select-none px-0.5"
+          >
+            …
+          </span>
         ) : (
           <motion.button
-            key={p} whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}
-            onClick={() => onPageChange(p)}
-            className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full text-xs sm:text-sm font-bold transition-all shadow-sm ${
-              p === meta.page
-                ? "bg-primary text-primary-foreground shadow-md scale-105"
-                : "bg-card/80 backdrop-blur-sm text-card-foreground hover:bg-primary hover:text-primary-foreground border border-border/60"
-            }`}
+            key={p}
+            whileTap={{ scale: 0.93 }}
+            onClick={() => onChange(p as number)}
+            className={`${btnBase} border`}
+            style={
+              p === page
+                ? {
+                    background: "var(--primary)",
+                    color: "var(--primary-foreground)",
+                    borderColor: "var(--primary)",
+                  }
+                : {
+                    background: "rgba(255,255,255,0.85)",
+                    color: "var(--foreground)",
+                    borderColor: "rgba(255,255,255,0.4)",
+                  }
+            }
           >
             {p}
           </motion.button>
-        )
+        ),
       )}
 
-      <motion.button
-        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-        onClick={() => onPageChange(meta.page + 1)}
+      <button
+        onClick={() => onChange(page + 1)}
         disabled={!meta.hasNextPage}
-        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-md"
+        className={btnBase}
+        style={{
+          background: "var(--primary)",
+          color: "var(--primary-foreground)",
+        }}
       >
-        <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-      </motion.button>
+        <ChevronRight className="w-4 h-4" />
+      </button>
 
-      <span className="text-[10px] sm:text-xs font-semibold text-white/80 bg-card/20 backdrop-blur-sm px-2.5 sm:px-3 py-1.5 rounded-full border border-white/20 ml-1">
-        {meta.page} / {meta.totalPages} · {meta.total}
+      <span className="text-[10px] sm:text-xs font-semibold text-white/80 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full border border-white/20 ml-1">
+        {page} / {totalPages} · {meta.total}
       </span>
     </motion.div>
   );
 }
 
-// ── Main page ──────────────────────────────────────────
-export default function PublicMenuPage() {
-  const [activeTab, setActiveTab] = useState<MenuTab>("daily");
-  const [mealFilter, setMealFilter] = useState<MealFilter>("All");
+// ── Page ───────────────────────────────────────────────────────────────
 
-  const [allMenuItems, setAllMenuItems] = useState<MenuItem[]>([]);
-  const [menuMeta, setMenuMeta] = useState<PaginationMeta | null>(null);
-  const [menuLoading, setMenuLoading] = useState(false);
-  const [menuPage, setMenuPage] = useState(1);
+export default function ChefsPage() {
+  const [chefs, setChefs] = useState<Chef[]>([]);
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
 
-  const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
-  const [plansMeta, setPlansMeta] = useState<PaginationMeta | null>(null);
-  const [plansLoading, setPlansLoading] = useState(false);
-  const [plansPage, setPlansPage] = useState(1);
-
-  const FILTERS: MealFilter[] = ["All", "Breakfast", "Lunch", "Dinner"];
-
-  const fetchMenuItems = useCallback(async (page: number) => {
-    setMenuLoading(true);
+  const fetchChefs = useCallback(async (p: number) => {
+    setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), limit: "10" });
-      const res = await fetch(`/api/public/menu?${params}`);
+      const params = new URLSearchParams({ page: String(p), limit: "12" });
+      const res = await fetch(`/api/public/chefs?${params}`);
       const json = await res.json();
-      if (json.success) { setAllMenuItems(json.data); setMenuMeta(json.meta); }
+      if (json.success) {
+        setChefs(json.data);
+        setMeta(json.meta);
+      }
     } catch (err) {
-      console.error("Failed to fetch menu items:", err);
+      console.error("Failed to fetch chefs:", err);
     } finally {
-      setMenuLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  const fetchMealPlans = useCallback(async (page: number) => {
-    setPlansLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(page), limit: "10" });
-      const res = await fetch(`/api/public/plans?${params}`);
-      const json = await res.json();
-      if (json.success) { setMealPlans(json.data); setPlansMeta(json.meta); }
-    } catch (err) {
-      console.error("Failed to fetch meal plans:", err);
-    } finally {
-      setPlansLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    fetchChefs(page);
+  }, [page, fetchChefs]);
 
-  useEffect(() => { fetchMenuItems(menuPage); }, [menuPage, fetchMenuItems]);
-  useEffect(() => { fetchMealPlans(plansPage); }, [plansPage, fetchMealPlans]);
-
-  const filteredMenuItems = applyMealFilter(allMenuItems, mealFilter);
-
-  const handleTabChange = (tab: MenuTab) => {
-    setActiveTab(tab);
-    setMealFilter("All");
-  };
-
-  const isLoading = activeTab === "daily" ? menuLoading : plansLoading;
-  const currentMeta = activeTab === "daily" ? menuMeta : plansMeta;
+  // ── Frontend filter — runs instantly as the user types ──────────────
+  const filteredChefs = search.trim()
+    ? chefs.filter((chef) => {
+        const q = search.toLowerCase();
+        const profile = chef.chef?.profile;
+        const chefName = [profile?.firstName, profile?.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return (
+          chef.name.toLowerCase().includes(q) ||
+          chefName.includes(q) ||
+          chef.city?.toLowerCase().includes(q) ||
+          chef.state?.toLowerCase().includes(q) ||
+          chef.country?.toLowerCase().includes(q) ||
+          chef.foodSpecialty.some((s) => s.toLowerCase().includes(q)) ||
+          chef.services.some((s) => s.toLowerCase().includes(q))
+        );
+      })
+    : chefs;
 
   return (
     <div className="relative w-full min-h-screen">
+      {/* Background */}
       <img
-        src="/bg-chefs.png" alt="" aria-hidden="true" decoding="async"
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", zIndex: 0, pointerEvents: "none" }}
+        src="/bg-chefs.png"
+        alt=""
+        aria-hidden="true"
+        decoding="async"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "center",
+          zIndex: 0,
+          pointerEvents: "none",
+        }}
       />
-      <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.15)", zIndex: 1, pointerEvents: "none" }} />
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: "rgba(0,0,0,0.18)",
+          zIndex: 1,
+          pointerEvents: "none",
+        }}
+      />
 
-      <div className="relative max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 space-y-4 sm:space-y-6" style={{ zIndex: 2 }}>
-
+      <div
+        className="relative max-w-5xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10 space-y-4 sm:space-y-6"
+        style={{ zIndex: 2 }}
+      >
         {/* Heading */}
-        <motion.h2
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-          className="text-lg sm:text-xl lg:text-2xl font-black text-white text-center drop-shadow-md"
-        >
-          {activeTab === "daily" ? "Our Menu" : "Meal Plans"}
-        </motion.h2>
-
-        {/* Tab switcher */}
         <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.05 }}
-          className="bg-card/90 backdrop-blur-sm rounded-2xl border border-border/50 px-3 sm:px-4 py-2.5 sm:py-3 flex items-center shadow-md"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="text-center space-y-2"
         >
-          <div className="flex items-center gap-0.5 sm:gap-1 bg-muted rounded-xl p-1">
-            {(["daily", "plans"] as MenuTab[]).map((tab) => (
-              <button
-                key={tab} onClick={() => handleTabChange(tab)}
-                className={`px-3 sm:px-5 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
-                  activeTab === tab
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {tab === "daily" ? "Menu Items" : "Meal Plans"}
-              </button>
-            ))}
-          </div>
+          <h2
+            className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight drop-shadow-lg"
+            style={{ color: "var(--primary)" }}
+          >
+            FIND YOUR PRIVATE CHEF
+          </h2>
+          <p
+            className="text-xs sm:text-sm font-black tracking-[0.2em] drop-shadow-sm"
+            style={{ color: "var(--secondary)" }}
+          >
+            CURATED KITCHENS &nbsp;·&nbsp; VERIFIED PROFESSIONALS
+          </p>
         </motion.div>
 
-        {/* Filter pills — daily tab only */}
-        {activeTab === "daily" && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, delay: 0.1 }}
-            className="flex gap-1.5 sm:gap-2 flex-wrap"
-          >
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setMealFilter(f)}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-[11px] sm:text-xs font-bold border transition-all duration-200 shadow-sm ${
-                  mealFilter === f
-                    ? "bg-primary text-primary-foreground border-primary shadow-md"
-                    : "bg-card/80 backdrop-blur-sm text-card-foreground border-border/60 hover:border-primary/40 hover:text-primary hover:bg-card"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </motion.div>
-        )}
+        {/* Search bar */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.38, delay: 0.08 }}
+          className="relative max-w-md mx-auto w-full"
+        >
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search chefs, cuisines, locations…"
+            className="pl-10 rounded-xl bg-white/90 backdrop-blur-sm border-white/30 text-foreground placeholder:text-muted-foreground shadow-md focus-visible:ring-primary"
+          />
+        </motion.div>
 
-        {/* Results count */}
-        {!isLoading && (
-          <p className="text-[10px] sm:text-xs text-white/70 font-medium">
-            {activeTab === "daily"
-              ? `Showing ${filteredMenuItems.length}${mealFilter !== "All" ? ` ${mealFilter}` : ""} item${filteredMenuItems.length !== 1 ? "s" : ""}`
-              : `Showing ${mealPlans.length} of ${plansMeta?.total ?? 0} plans`
-            }
-          </p>
+        {/* Count line */}
+        {!loading && meta && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-[10px] sm:text-xs text-white/70 font-medium"
+          >
+            {meta.total} chef{meta.total !== 1 ? "s" : ""} available
+          </motion.p>
         )}
 
         {/* Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3 lg:gap-4">
           <AnimatePresence mode="popLayout">
-            {isLoading
-              ? Array.from({ length: 8 }).map((_, i) => <ShimmerCard key={`shimmer-${i}`} />)
-              : activeTab === "daily"
-                ? filteredMenuItems.map((item, i) => <MenuItemCard key={item.id} item={item} index={i} />)
-                : mealPlans.map((plan, i) => <MealPlanCard key={plan.id} plan={plan} index={i} />)
-            }
+            {loading
+              ? Array.from({ length: 8 }).map((_, i) => (
+                  <ShimmerCard key={`shimmer-${i}`} />
+                ))
+              : filteredChefs.map((chef, i) => (
+                  <ChefCard key={chef.id} chef={chef} index={i} />
+                ))}
           </AnimatePresence>
         </div>
 
-        {/* Empty states */}
-        {!isLoading && activeTab === "daily" && filteredMenuItems.length === 0 && (
-          <div className="text-center py-12 sm:py-16 text-white/60">
-            <p className="text-3xl sm:text-4xl mb-3">🍽️</p>
-            <p className="font-semibold text-sm sm:text-base">
-              No {mealFilter !== "All" ? mealFilter : ""} items found
-            </p>
-          </div>
-        )}
-        {!isLoading && activeTab === "plans" && mealPlans.length === 0 && (
-          <div className="text-center py-12 sm:py-16 text-white/60">
-            <p className="text-3xl sm:text-4xl mb-3">🥗</p>
-            <p className="font-semibold text-sm sm:text-base">No meal plans available</p>
+        {/* Empty state */}
+        {!loading && filteredChefs.length === 0 && (
+          <div className="text-center py-16 text-white/60">
+            <p className="text-5xl mb-4">👨‍🍳</p>
+            {search.trim() ? (
+              <>
+                <p className="font-semibold text-sm sm:text-base">
+                  No chefs match &quot;{search}&quot;
+                </p>
+                <p className="text-xs mt-1 opacity-70">
+                  Try a different name, cuisine or location
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-semibold text-sm sm:text-base">
+                  No chefs available right now
+                </p>
+                <p className="text-xs mt-1 opacity-70">Check back soon!</p>
+              </>
+            )}
           </div>
         )}
 
-        {/* Pagination */}
-        {!isLoading && currentMeta && mealFilter === "All" && (
+        {/* Pagination — hidden while searching since we filter in-memory */}
+        {!loading && meta && !search.trim() && (
           <Pagination
-            meta={currentMeta}
-            onPageChange={(p) => {
-              if (activeTab === "daily") setMenuPage(p);
-              else setPlansPage(p);
+            meta={meta}
+            onChange={(p) => {
+              setPage(p);
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           />
@@ -473,7 +580,11 @@ export default function PublicMenuPage() {
       </div>
 
       <style jsx global>{`
-        @keyframes shimmer { 100% { transform: translateX(200%); } }
+        @keyframes shimmer {
+          100% {
+            transform: translateX(200%);
+          }
+        }
       `}</style>
     </div>
   );

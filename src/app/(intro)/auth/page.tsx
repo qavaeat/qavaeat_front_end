@@ -1,12 +1,4 @@
 "use client";
-
-// npm install @react-oauth/google
-// Add to your root layout.tsx:
-//   import { GoogleOAuthProvider } from "@react-oauth/google";
-//   <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!}>
-//     {children}
-//   </GoogleOAuthProvider>
-
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -137,14 +129,17 @@ export default function AuthPage() {
 
 function resolveDestination(returnTo: string | null, role: string): string {
   if (typeof window !== "undefined") {
+    // Clean up regardless
+    sessionStorage.removeItem("lastRoute");
+
     const storedReturnTo = sessionStorage.getItem("returnTo");
     sessionStorage.removeItem("returnTo");
+
     const destination = returnTo ?? storedReturnTo;
     if (destination) return decodeURIComponent(destination);
-    const lastRoute = sessionStorage.getItem("lastRoute");
-    sessionStorage.removeItem("lastRoute");
-    if (lastRoute && lastRoute !== "/auth") return lastRoute;
   }
+
+  // If no explicit redirect was set, go to role-based default
   switch (role) {
     case "CHEF": return "/chef/dashboard";
     case "SUPERADMIN": return "/admin/chefs";

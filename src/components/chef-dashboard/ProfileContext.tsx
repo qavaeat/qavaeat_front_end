@@ -21,20 +21,54 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<ChefUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // const refresh = useCallback(async () => {
+  //   try {
+  //     const res = await fetch("/api/profile", { cache: "no-store" });
+  //     if (!res.ok) return;
+  //     const json = await res.json();
+  //     // backend returns { success, data: { user } } or { success, data: profile }
+  //     const data = json?.data;
+  //     if (data) setUser(data);
+  //   } catch {
+  //     // silent
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }, []);
+
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/profile", { cache: "no-store" });
-      if (!res.ok) return;
-      const json = await res.json();
-      // backend returns { success, data: { user } } or { success, data: profile }
-      const data = json?.data;
-      if (data) setUser(data);
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
+  try {
+    const res = await fetch("/api/profile", { cache: "no-store" });
+    if (!res.ok) return;
+    const json = await res.json();
+    const profile = json?.data?.profile;
+    if (profile) {
+      setUser({
+        id: profile.userId ?? "",
+        email: profile.user?.email ?? "",
+        profile: {
+          id: profile.id ?? "",
+          userId: profile.userId ?? "",
+          firstName: profile.firstName ?? null,
+          lastName: profile.lastName ?? null,
+          phone: profile.phone ?? null,
+          avatarUrl: profile.avatarUrl ?? null,
+          address: profile.address ?? null,
+          city: profile.city ?? null,
+          state: profile.state ?? null,
+          country: profile.country ?? null,
+          postalCode: profile.postalCode ?? null,
+          latitude: profile.latitude ?? null,
+          longitude: profile.longitude ?? null,
+        },
+      });
     }
-  }, []);
+  } catch {
+    // silent
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   const updateOptimistic = useCallback(
     (patch: Partial<NonNullable<ChefUser["profile"]> & Pick<ChefUser, "email">>) => {

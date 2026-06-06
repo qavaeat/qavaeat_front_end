@@ -57,6 +57,7 @@ import {
 import { LocationPicker } from "@/lib/locationPicker";
 import { PickedLocation } from "@/lib/maps";
 import { usePaymentStatus } from "../../../hooks/usePaymentStatus";
+import { useRouter } from "next/navigation";
 
 // ─────────────────────────────────────────────────────
 // Types
@@ -794,8 +795,12 @@ function PhoneInput({
             <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
               M-Pesa Prompt
             </p>
-            <p className="text-xs font-bold text-foreground truncate">
-              {useAlt && normalized ? formatKEPhoneDisplay(value) : systemPhone}
+            <p
+              className={`text-xs font-bold truncate ${systemPhone ? "text-foreground" : "text-muted-foreground italic"}`}
+            >
+              {useAlt && normalized
+                ? formatKEPhoneDisplay(value)
+                : systemPhone || "No number saved"}
             </p>
           </div>
         </div>
@@ -1102,6 +1107,7 @@ function CheckoutModal({
   const [placing, setPlacing] = useState(false);
   const [deliveryLocation, setDeliveryLocation] =
     useState<PickedLocation | null>(null);
+  const router = useRouter();
 
   const [altPhoneRaw, setAltPhoneRaw] = useState("");
   const [altPhoneNormalized, setAltPhoneNormalized] = useState<string | null>(
@@ -1321,6 +1327,15 @@ function CheckoutModal({
     (altPhoneRaw.trim() === "" || altPhoneNormalized !== null);
 
   const handlePlace = async () => {
+    if (!customerPhone?.trim() && !altPhoneNormalized) {
+      toast.error("Add a phone number to your profile before paying.", {
+        description: "You'll be redirected to your profile.",
+        duration: 4000,
+      });
+      onClose();
+      window.location.href = "/profile?section=personal&highlight=phone";
+      return;
+    }
     if (!canPlace || mealCount === 0) return;
     setPlacing(true);
     try {
@@ -2266,12 +2281,12 @@ function WalletPanel({
         )}
       </div>
 
-      <div className="px-5 pb-5 pt-2">
+      {/* <div className="px-5 pb-5 pt-2">
         <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-black">
           <BadgeDollarSign className="w-4 h-4 mr-2" />
           Deposit Funds
         </Button>
-      </div>
+      </div> */}
     </div>
   );
 }
@@ -4266,7 +4281,7 @@ export default function MyTablePage() {
           <CheckoutModal
             savedSchedules={savedSchedules}
             draftSchedule={checkoutDraft}
-            customerPhone={customerPhone ?? "your phone"}
+            customerPhone={customerPhone ?? ""}
             onClose={handleCheckoutClose}
             onConfirm={handleConfirmPayment}
             onPaymentComplete={handlePaymentComplete}

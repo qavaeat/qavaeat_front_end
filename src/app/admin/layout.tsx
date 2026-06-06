@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 type ThemeOption = "light" | "dark" | "system";
 
@@ -30,14 +31,21 @@ function SettingsDrawerContent({ onClose }: { onClose: () => void }) {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const isDark = theme === "dark";
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } finally {
-      router.push("/auth");
-    }
+ async function handleLogout() {
+  setLoggingOut(true);
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+
+    sessionStorage.removeItem("returnTo");
+    sessionStorage.removeItem("lastRoute");
+
+    router.replace("/auth"); 
+  } catch {
+    toast.error("Logout failed. Please try again.");
+  } finally {
+    setLoggingOut(false);
   }
+}
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
