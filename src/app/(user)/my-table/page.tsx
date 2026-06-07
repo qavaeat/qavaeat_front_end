@@ -3472,10 +3472,10 @@ function WeekScheduler({
           )}
         </p>
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr] xl:grid-cols-[200px_1fr] gap-4">
+      <div className="grid grid-cols-1 gap-4">
+        {/* <div className="grid grid-cols-1 lg:grid-cols-[180px_1fr] xl:grid-cols-[200px_1fr] gap-4"> */}
         {/* Plan sidebar */}
-        <div className="bg-background/95 backdrop-blur-sm rounded-2xl border border-border shadow-lg p-4 flex flex-col h-fit lg:sticky lg:top-4">
+        {/* <div className="bg-background/95 backdrop-blur-sm rounded-2xl border border-border shadow-lg p-4 flex flex-col h-fit lg:sticky lg:top-4">
           <div className="flex items-center justify-between border-b border-border pb-2 mb-3 flex-shrink-0">
             <h3 className="text-xs font-black text-foreground tracking-widest uppercase">
               Your Plan
@@ -3550,7 +3550,7 @@ function WeekScheduler({
           <p className="text-[9px] text-muted-foreground text-center pt-2 flex-shrink-0 border-t border-border mt-2">
             Tap any + cell to assign →
           </p>
-        </div>
+        </div> */}
 
         {/* Grid */}
         <div>
