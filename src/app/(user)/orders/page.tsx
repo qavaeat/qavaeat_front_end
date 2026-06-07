@@ -470,13 +470,33 @@ function OrderRow({
           </div>
 
           {/* Status */}
+          {/* Status */}
           <div className="w-[80px] flex-shrink-0 flex justify-end">
-            <span
-              className={`inline-flex items-center gap-1 text-[9px] font-black px-2.5 py-1 rounded-full ${status.bg} ${status.text}`}
-            >
-              <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
-              {status.label}
-            </span>
+            {order.source === "SCHEDULE" || order.source === "MEAL_PLAN" ? (
+              <span
+                className={`inline-flex items-center gap-1 text-[9px] font-black px-2.5 py-1 rounded-full ${
+                  order.paymentStatus === "PAID"
+                    ? "bg-[#007606]/10 text-[#007606]"
+                    : "bg-[#EBE9E9] text-[#858484]"
+                }`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    order.paymentStatus === "PAID"
+                      ? "bg-[#007606]"
+                      : "bg-[#858484]"
+                  }`}
+                />
+                {order.paymentStatus === "PAID" ? "Paid" : "Unpaid"}
+              </span>
+            ) : (
+              <span
+                className={`inline-flex items-center gap-1 text-[9px] font-black px-2.5 py-1 rounded-full ${status.bg} ${status.text}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${status.dot}`} />
+                {status.label}
+              </span>
+            )}
           </div>
         </div>
       </button>
