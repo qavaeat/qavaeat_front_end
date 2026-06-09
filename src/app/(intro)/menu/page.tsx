@@ -3,7 +3,7 @@
 // src/app/(intro)/menu/page.tsx
 // Displays all approved chefs on a paginated grid.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,10 @@ import {
   CalendarDays,
   ChefHat,
   Search,
+  Navigation,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -43,6 +46,7 @@ interface Chef {
   businessHours: BusinessHour[];
   isOpen: boolean;
   averageRating: number | null;
+  distanceKm?: number;
   chef: {
     profile: {
       firstName: string | null;
@@ -216,6 +220,15 @@ function ChefCard({ chef, index }: { chef: Chef; index: number }) {
             {[chef.city, chef.state].filter(Boolean).join(", ")}
           </span>
         </div>
+
+        {/* Distance pill — only shown when backend returned a distance */}
+        {chef.distanceKm !== undefined && (
+          <span className="text-[9px] font-bold px-1.5 py-[3px] rounded-full bg-primary/10 text-primary border border-primary/20">
+            {chef.distanceKm < 1
+              ? `${Math.round(chef.distanceKm * 1000)} m away`
+              : `${chef.distanceKm.toFixed(1)} km away`}
+          </span>
+        )}
 
         {/* Services */}
         {chef.services.length > 0 && (
@@ -398,17 +411,31 @@ function Pagination({
 
 // ── Page ───────────────────────────────────────────────────────────────
 
+const RADIUS_KM = 25;
+
 export default function ChefsPage() {
   const [chefs, setChefs] = useState<Chef[]>([]);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [nearMe, setNearMe] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
 
+  // ── Ref holds the live coords — no batching issues, no stale closures ──
+  const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  // ── Core fetch — reads coordsRef directly so it's always current ──────
   const fetchChefs = useCallback(async (p: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(p), limit: "12" });
+      const coords = coordsRef.current;
+      if (coords) {
+        params.set("lat", String(coords.lat));
+        params.set("lng", String(coords.lng));
+        params.set("radius", String(RADIUS_KM));
+      }
       const res = await fetch(`/api/public/chefs?${params}`);
       const json = await res.json();
       if (json.success) {
@@ -420,13 +447,49 @@ export default function ChefsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // stable — reads ref, not state
 
+  // ── Re-fetch when page changes (coords already in ref) ────────────────
   useEffect(() => {
-    fetchChefs(page);
+    void fetchChefs(page);
   }, [page, fetchChefs]);
 
-  // ── Frontend filter — runs instantly as the user types ──────────────
+  // ── Near Me toggle ────────────────────────────────────────────────────
+  const handleNearMe = useCallback(() => {
+    // Clear mode
+    if (nearMe) {
+      coordsRef.current = null;
+      setNearMe(false);
+      setPage(1);
+      void fetchChefs(1); // fetch without coords immediately
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      toast.error("Geolocation not supported on this device");
+      return;
+    }
+
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords: { latitude, longitude } }) => {
+        // Write to ref FIRST — fetchChefs will read it synchronously
+        coordsRef.current = { lat: latitude, lng: longitude };
+        setGpsLoading(false);
+        setNearMe(true);
+        setPage(1);
+        // Call directly with fresh coords already in ref
+        void fetchChefs(1);
+      },
+      () => {
+        toast.error("Location access denied — enable it in your browser");
+        setGpsLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, [nearMe, fetchChefs]);
+
+  // ── Frontend search filter ────────────────────────────────────────────
   const filteredChefs = search.trim()
     ? chefs.filter((chef) => {
         const q = search.toLowerCase();
@@ -502,22 +565,70 @@ export default function ChefsPage() {
           </p>
         </motion.div>
 
-        {/* Search bar */}
+        {/* Search + Near Me row */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.38, delay: 0.08 }}
-          className="relative max-w-md mx-auto w-full"
+          className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-lg mx-auto w-full"
         >
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search chefs, cuisines, locations…"
-            className="pl-10 rounded-xl bg-white/90 backdrop-blur-sm border-white/30 text-foreground placeholder:text-muted-foreground shadow-md focus-visible:ring-primary"
-          />
+          {/* Search input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search chefs, cuisines, locations…"
+              className="pl-10 rounded-xl bg-white/90 backdrop-blur-sm border-white/30 text-foreground placeholder:text-muted-foreground shadow-md focus-visible:ring-primary"
+            />
+          </div>
+
+          {/* Near Me button */}
+          <button
+            onClick={handleNearMe}
+            disabled={gpsLoading}
+            className={`flex items-center justify-center gap-2 px-4 py-2 h-10 rounded-xl text-xs font-black transition-all shadow-md border whitespace-nowrap disabled:opacity-60 flex-shrink-0 ${
+              nearMe
+                ? "border-transparent text-primary-foreground"
+                : "bg-white/90 backdrop-blur-sm border-white/30 text-foreground hover:bg-white"
+            }`}
+            style={nearMe ? { background: "var(--primary)" } : {}}
+          >
+            {gpsLoading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+            ) : (
+              <Navigation
+                className="w-3.5 h-3.5 flex-shrink-0"
+                style={nearMe ? {} : { color: "var(--primary)" }}
+              />
+            )}
+            <span>
+              {gpsLoading ? "Locating…" : nearMe ? "Near Me ✓" : "Near Me"}
+            </span>
+          </button>
         </motion.div>
+
+        {/* Active Near Me indicator */}
+        <AnimatePresence>
+          {nearMe && !loading && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className="flex justify-center"
+            >
+              <button
+                onClick={handleNearMe}
+                className="flex items-center gap-1.5 text-[10px] font-bold px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-white hover:bg-white/30 transition-colors"
+              >
+                <Navigation className="w-3 h-3" />
+                Showing chefs within {RADIUS_KM} km · tap to clear
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Count line */}
         {!loading && meta && (
@@ -526,7 +637,8 @@ export default function ChefsPage() {
             animate={{ opacity: 1 }}
             className="text-[10px] sm:text-xs text-white/70 font-medium"
           >
-            {meta.total} chef{meta.total !== 1 ? "s" : ""} available
+            {meta.total} chef{meta.total !== 1 ? "s" : ""}
+            {nearMe ? ` within ${RADIUS_KM} km` : " available"}
           </motion.p>
         )}
 
@@ -547,7 +659,22 @@ export default function ChefsPage() {
         {!loading && filteredChefs.length === 0 && (
           <div className="text-center py-16 text-white/60">
             <p className="text-5xl mb-4">👨‍🍳</p>
-            {search.trim() ? (
+            {nearMe && !search.trim() ? (
+              <>
+                <p className="font-semibold text-sm sm:text-base">
+                  No chefs found within {RADIUS_KM} km
+                </p>
+                <p className="text-xs mt-1 opacity-70">
+                  Try browsing all chefs instead
+                </p>
+                <button
+                  onClick={handleNearMe}
+                  className="mt-4 text-xs font-bold px-4 py-2 rounded-xl border border-white/30 bg-white/10 hover:bg-white/20 transition-colors text-white"
+                >
+                  Show all chefs
+                </button>
+              </>
+            ) : search.trim() ? (
               <>
                 <p className="font-semibold text-sm sm:text-base">
                   No chefs match &quot;{search}&quot;
@@ -567,7 +694,7 @@ export default function ChefsPage() {
           </div>
         )}
 
-        {/* Pagination — hidden while searching since we filter in-memory */}
+        {/* Pagination */}
         {!loading && meta && !search.trim() && (
           <Pagination
             meta={meta}

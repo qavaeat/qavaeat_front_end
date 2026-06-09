@@ -92,6 +92,52 @@ interface LocationPickerProps {
 
 // ─── Pin element ──────────────────────────────────────────────────────────────
 
+// ─── Plus Code utilities ─────────────────────────────────────────────────────
+const PLUS_CODE_RE =
+  /[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,3}/i;
+
+function isPlusCode(text: string): boolean {
+  return PLUS_CODE_RE.test((text ?? "").trim());
+}
+
+function stripPlusCode(addr: string): string {
+  return (addr ?? "")
+    .replace(new RegExp(PLUS_CODE_RE.source + ",?\\s*", "gi"), "")
+    .replace(/^[,\s]+/, "")
+    .trim();
+}
+
+type AddrComp = { long_name?: string; longText?: string; types: string[] };
+
+function buildReadableAddress(
+  components: AddrComp[] | undefined,
+  fallback: string,
+): string {
+  const nonPlus = (components ?? []).filter(
+    (c) => !c.types.includes("plus_code"),
+  );
+  const text = (type: string) =>
+    nonPlus.find((c) => c.types.includes(type))?.long_name ??
+    nonPlus.find((c) => c.types.includes(type))?.longText ??
+    "";
+
+  const streetNum = text("street_number");
+  const route = text("route");
+  const hood =
+    text("neighborhood") || text("sublocality_level_1") || text("sublocality");
+  const city = text("locality");
+  const admin =
+    text("administrative_area_level_2") || text("administrative_area_level_1");
+
+  const parts = [
+    route ? (streetNum ? `${streetNum} ${route}` : route) : "",
+    hood,
+    city || admin,
+  ].filter(Boolean);
+
+  return parts.length ? parts.join(", ") : stripPlusCode(fallback) || fallback;
+}
+
 function createPinElement(): HTMLDivElement {
   const el = document.createElement("div");
   el.style.cssText = [
@@ -185,9 +231,24 @@ export function LocationPicker({
     (pos: GLatLng) => {
       setGeocoding(true);
       const { Geocoder } = gmaps();
+      // new Geocoder().geocode({ location: pos }, (results, status) => {
+      //   if (status === "OK" && results?.[0]) {
+      //     commit(extractLocation(results[0], pos.lat(), pos.lng()));
+      //   }
+      //   setGeocoding(false);
+      // });
       new Geocoder().geocode({ location: pos }, (results, status) => {
         if (status === "OK" && results?.[0]) {
-          commit(extractLocation(results[0], pos.lat(), pos.lng()));
+          const loc = extractLocation(results[0], pos.lat(), pos.lng());
+          const readable = buildReadableAddress(
+            results[0].address_components,
+            loc.formatted_address,
+          );
+          commit({
+            ...loc,
+            formatted_address: readable,
+            ...(isPlusCode(loc.name ?? "") && { name: readable }),
+          });
         }
         setGeocoding(false);
       });
@@ -326,23 +387,55 @@ export function LocationPicker({
           ],
         });
 
+        // const lat = place.location?.lat() ?? 0;
+        // const lng = place.location?.lng() ?? 0;
+
+        // commit(
+        //   extractLocation(
+        //     {
+        //       formatted_address: place.formattedAddress,
+        //       name: place.displayName,
+        //       place_id: place.id,
+        //       geometry: place.location
+        //         ? { location: place.location }
+        //         : undefined,
+        //       address_components: place.addressComponents?.map((c) => ({
+        //         long_name: c.longText,
+        //         short_name: c.shortText,
+        //         types: c.types,
+        //       })),
+        //     },
+        //     lat,
+        //     lng,
+        //   ),
+        // );
         const lat = place.location?.lat() ?? 0;
         const lng = place.location?.lng() ?? 0;
+
+        const normalizedComponents = place.addressComponents?.map((c) => ({
+          long_name: c.longText,
+          short_name: c.shortText,
+          types: c.types,
+        }));
+
+        const cleanAddr = buildReadableAddress(
+          normalizedComponents,
+          place.formattedAddress ?? "",
+        );
+        const cleanName = isPlusCode(place.displayName ?? "")
+          ? cleanAddr
+          : (place.displayName ?? cleanAddr);
 
         commit(
           extractLocation(
             {
-              formatted_address: place.formattedAddress,
-              name: place.displayName,
+              formatted_address: cleanAddr,
+              name: cleanName,
               place_id: place.id,
               geometry: place.location
                 ? { location: place.location }
                 : undefined,
-              address_components: place.addressComponents?.map((c) => ({
-                long_name: c.longText,
-                short_name: c.shortText,
-                types: c.types,
-              })),
+              address_components: normalizedComponents,
             },
             lat,
             lng,
@@ -403,7 +496,17 @@ export function LocationPicker({
                 },
               );
             });
-            loc = extractLocation(results[0]!, lat, lng);
+            // loc = extractLocation(results[0]!, lat, lng);
+            const rawLoc = extractLocation(results[0]!, lat, lng);
+            const readable = buildReadableAddress(
+              results[0]!.address_components,
+              rawLoc.formatted_address,
+            );
+            loc = {
+              ...rawLoc,
+              formatted_address: readable,
+              ...(isPlusCode(rawLoc.name ?? "") && { name: readable }),
+            };
           } else {
             loc = await reverseGeocodeNominatim(lat, lng);
           }
@@ -618,14 +721,26 @@ export function LocationPicker({
             <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wide mb-0.5">
               {confirmLabel}
             </p>
-            {value.name && (
+            {/* {value.name && (
+              <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 truncate flex items-center gap-1">
+                <Building2 className="w-2.5 h-2.5 flex-shrink-0" />
+                {value.name}
+              </p>
+            )} */}
+            {/* Name — only show if it isn't itself a Plus Code */}
+
+            {/* <p className="text-[11px] text-emerald-700 dark:text-emerald-300 truncate">
+              {value.formatted_address}
+            </p> */}
+
+            {value.name && !isPlusCode(value.name) && (
               <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 truncate flex items-center gap-1">
                 <Building2 className="w-2.5 h-2.5 flex-shrink-0" />
                 {value.name}
               </p>
             )}
             <p className="text-[11px] text-emerald-700 dark:text-emerald-300 truncate">
-              {value.formatted_address}
+              {stripPlusCode(value.formatted_address)}
             </p>
             {(value.road ?? value.suburb ?? value.city) && (
               <p className="text-[9px] text-emerald-600/80 dark:text-emerald-500 truncate mt-0.5">

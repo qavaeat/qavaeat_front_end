@@ -13,9 +13,10 @@ export function Navbar() {
 
   const navItems = [
     { label: "HOME", href: "/" },
-    { label: "OUR CHEFS", href: "/menu" },
+    { label: "DISCOVER CHEFS", href: "/menu" },
     { label: "NEWS", href: "/news" },
     { label: "FAQS", href: "/faq" },
+    { label: "BECOME A PARTNER CHEF", href: "/register" },
     { label: "CONTACT US", href: "/contact" },
   ];
 
@@ -99,11 +100,11 @@ export function Navbar() {
               transition={{ delay: 0.3, duration: 0.4 }}
             >
               <Button
-                variant="ghost"
-                className="text-foreground hover:text-primary font-medium text-sm px-4"
+                // variant="ghost"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-sm px-5 rounded-full"
                 onClick={handleAuthClick}
               >
-                Log In
+                Get Started
               </Button>
             </motion.div>
             <motion.div
@@ -111,12 +112,12 @@ export function Navbar() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4, duration: 0.4 }}
             >
-              <Button
+              {/* <Button
                 className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium text-sm px-5 rounded-full"
                 onClick={handleAuthClick}
               >
                 Sign Up
-              </Button>
+              </Button> */}
             </motion.div>
           </div>
 
@@ -183,18 +184,18 @@ export function Navbar() {
                   transition={{ delay: 0.25, duration: 0.25 }}
                 >
                   <Button
-                    variant="outline"
-                    className="flex-1 rounded-full border-primary text-primary hover:bg-primary/5"
+                    // variant="outline"
+                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full"
                     onClick={handleAuthClick}
                   >
-                    Log In
+                    Get Started
                   </Button>
-                  <Button
+                  {/* <Button
                     className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full"
                     onClick={handleAuthClick}
                   >
                     Sign Up
-                  </Button>
+                  </Button> */}
                 </motion.div>
               </div>
             </motion.div>

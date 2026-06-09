@@ -525,7 +525,7 @@ export function UserNav({
                 </p>
 
                 {[
-                  { href: "/wallet", label: "Wallet & Payments", icon: Wallet },
+                  // { href: "/wallet", label: "Wallet & Payments", icon: Wallet },
                   { href: "/settings", label: "Settings", icon: Settings },
                 ].map((item, i) => {
                   const Icon = item.icon;
