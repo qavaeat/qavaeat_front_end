@@ -1333,7 +1333,7 @@ export default function KitchenPage({ businessId }: { businessId?: string }) {
           <motion.a
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            href="/my-table"
+            href="/my-table?tab=schedule"
             className="fixed bottom-6 right-6 z-30 flex items-center gap-2.5 bg-primary text-primary-foreground rounded-2xl px-4 py-3 shadow-2xl font-bold text-sm hover:bg-primary/90 transition-colors"
           >
             <CalendarDays className="w-4 h-4" />

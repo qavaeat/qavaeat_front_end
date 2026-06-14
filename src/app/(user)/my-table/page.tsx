@@ -57,7 +57,7 @@ import {
 import { LocationPicker } from "@/lib/locationPicker";
 import { PickedLocation } from "@/lib/maps";
 import { usePaymentStatus } from "../../../hooks/usePaymentStatus";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // ─────────────────────────────────────────────────────
 // Types
@@ -2065,8 +2065,6 @@ function ScheduleManagerModal({
   );
 }
 
- 
-
 // ─────────────────────────────────────────────────────
 // EAT helper & schedule item actions hook
 // ─────────────────────────────────────────────────────
@@ -2881,7 +2879,6 @@ function MyTableViewer({
               </div>
             )}
           </div>
-         
         </div>
       )}
     </div>
@@ -3626,7 +3623,7 @@ function WeekScheduler({
 // ─────────────────────────────────────────────────────
 // Main page
 // ─────────────────────────────────────────────────────
-export default function MyTablePage() {
+function MyTablePage() {
   const TODAY = getToday();
 
   const thisWeekStart = weekStartOf(TODAY);
@@ -3656,7 +3653,11 @@ export default function MyTablePage() {
 
   const mounted = !planLoading && !schedulesLoading;
 
-  const [activeTab, setActiveTab] = useState<"mytable" | "schedule">("mytable");
+  // const [activeTab, setActiveTab] = useState<"mytable" | "schedule">("mytable");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<"mytable" | "schedule">(
+    searchParams.get("tab") === "schedule" ? "schedule" : "mytable",
+  );
   const [baseWeekStart, setBaseWeekStart] = useState<Date>(thisWeekStart);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showManager, setShowManager] = useState(false);
@@ -3889,6 +3890,38 @@ export default function MyTablePage() {
 
   const handleOpenCheckout = useCallback(
     async (draft: typeof checkoutDraft) => {
+      const freshPhone = await fetch("/api/profile")
+        .then((r) => r.json())
+        .then((res) => {
+          console.log("PROFILE RESPONSE:", JSON.stringify(res));
+          return (
+            res?.data?.phone ?? res?.phone ?? res?.data?.profile?.phone ?? ""
+          );
+        })
+        .catch(() => "");
+
+      if (!freshPhone?.trim()) {
+        toast.error("Add a phone number to your profile before paying.", {
+          description:
+            "Your M-Pesa number is required to receive the payment prompt.",
+          action: {
+            label: "Go to Settings",
+            onClick: () => {
+              window.location.href = "/settings";
+            },
+          },
+          duration: 5000,
+
+          actionButtonStyle: {
+            backgroundColor: "var(--secondary)",
+            color: "var(--secondary-foreground)",
+            fontWeight: "700",
+            borderRadius: "8px",
+          },
+        });
+        return;
+      }
+
       await loadSchedules();
 
       const freshDraft = draft
@@ -4073,5 +4106,15 @@ export default function MyTablePage() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+import { Suspense } from "react";
+
+export default function MyTablePageWrapper() {
+  return (
+    <Suspense>
+      <MyTablePage />
+    </Suspense>
   );
 }

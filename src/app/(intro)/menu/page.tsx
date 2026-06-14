@@ -1,8 +1,4 @@
 "use client";
-
-// src/app/(intro)/menu/page.tsx
-// Displays all approved chefs on a paginated grid.
-
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -154,11 +150,8 @@ function ShimmerCard() {
 
 const SERVICE_META: Record<string, { icon: React.ReactNode; label: string }> = {
   DELIVERY: { icon: <Truck className="w-2.5 h-2.5" />, label: "Delivery" },
-  PICKUP: { icon: <ShoppingBag className="w-2.5 h-2.5" />, label: "Pickup" },
-  DINE_IN: {
-    icon: <UtensilsCrossed className="w-2.5 h-2.5" />,
-    label: "Dine-in",
-  },
+  PICKUP:   { icon: <ShoppingBag className="w-2.5 h-2.5" />, label: "Pickup" },
+  DINE_IN:  { icon: <UtensilsCrossed className="w-2.5 h-2.5" />, label: "Dine-in" },
 };
 
 function ChefCard({ chef, index }: { chef: Chef; index: number }) {
@@ -177,7 +170,7 @@ function ChefCard({ chef, index }: { chef: Chef; index: number }) {
       whileHover={{ y: -4, transition: { duration: 0.18 } }}
       className="bg-card rounded-2xl border border-border shadow-sm hover:shadow-lg transition-all duration-200 flex flex-col overflow-hidden"
     >
-      {/* Open/Closed colour strip at top */}
+      {/* Open/Closed colour strip */}
       <div
         className="h-1 w-full flex-shrink-0 transition-colors duration-500"
         style={{ background: chef.isOpen ? "#22c55e" : "var(--muted)" }}
@@ -192,17 +185,14 @@ function ChefCard({ chef, index }: { chef: Chef; index: number }) {
             style={
               chef.isOpen
                 ? { background: "#22c55e", color: "#fff" }
-                : {
-                    background: "var(--muted)",
-                    color: "var(--muted-foreground)",
-                  }
+                : { background: "var(--muted)", color: "var(--muted-foreground)" }
             }
           >
             {chef.isOpen ? "● Open" : "● Closed"}
           </span>
         </div>
 
-        {/* Chef name first, then business name */}
+        {/* Chef name + business name */}
         <div className="text-center space-y-0.5">
           <p className="text-xs sm:text-sm font-black text-card-foreground leading-tight line-clamp-1">
             {chefName}
@@ -210,7 +200,6 @@ function ChefCard({ chef, index }: { chef: Chef; index: number }) {
           <p className="text-[10px] text-muted-foreground">{chef.name}</p>
         </div>
 
-        {/* Stars */}
         <Stars rating={chef.averageRating} count={chef._count.reviews} />
 
         {/* Location */}
@@ -221,7 +210,7 @@ function ChefCard({ chef, index }: { chef: Chef; index: number }) {
           </span>
         </div>
 
-        {/* Distance pill — only shown when backend returned a distance */}
+        {/* Distance */}
         {chef.distanceKm !== undefined && (
           <span className="text-[9px] font-bold px-1.5 py-[3px] rounded-full bg-primary/10 text-primary border border-primary/20">
             {chef.distanceKm < 1
@@ -289,10 +278,9 @@ function ChefCard({ chef, index }: { chef: Chef; index: number }) {
           )}
         </div>
 
-        {/* Push CTA to bottom */}
         <div className="flex-1" />
 
-        {/* View Kitchen CTA */}
+        {/* CTA */}
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={() => router.push(`/kitchen/${chef.id}`)}
@@ -349,20 +337,14 @@ function Pagination({
         onClick={() => onChange(page - 1)}
         disabled={!meta.hasPrevPage}
         className={btnBase}
-        style={{
-          background: "var(--primary)",
-          color: "var(--primary-foreground)",
-        }}
+        style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
 
       {pages.map((p, i) =>
         p === "..." ? (
-          <span
-            key={`e-${i}`}
-            className="text-white/60 text-sm select-none px-0.5"
-          >
+          <span key={`e-${i}`} className="text-white/60 text-sm select-none px-0.5">
             …
           </span>
         ) : (
@@ -373,16 +355,8 @@ function Pagination({
             className={`${btnBase} border`}
             style={
               p === page
-                ? {
-                    background: "var(--primary)",
-                    color: "var(--primary-foreground)",
-                    borderColor: "var(--primary)",
-                  }
-                : {
-                    background: "rgba(255,255,255,0.85)",
-                    color: "var(--foreground)",
-                    borderColor: "rgba(255,255,255,0.4)",
-                  }
+                ? { background: "var(--primary)", color: "var(--primary-foreground)", borderColor: "var(--primary)" }
+                : { background: "rgba(255,255,255,0.85)", color: "var(--foreground)", borderColor: "rgba(255,255,255,0.4)" }
             }
           >
             {p}
@@ -394,10 +368,7 @@ function Pagination({
         onClick={() => onChange(page + 1)}
         disabled={!meta.hasNextPage}
         className={btnBase}
-        style={{
-          background: "var(--primary)",
-          color: "var(--primary-foreground)",
-        }}
+        style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
       >
         <ChevronRight className="w-4 h-4" />
       </button>
@@ -414,18 +385,16 @@ function Pagination({
 const RADIUS_KM = 25;
 
 export default function ChefsPage() {
-  const [chefs, setChefs] = useState<Chef[]>([]);
-  const [meta, setMeta] = useState<PaginationMeta | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [nearMe, setNearMe] = useState(false);
+  const [chefs, setChefs]         = useState<Chef[]>([]);
+  const [meta, setMeta]           = useState<PaginationMeta | null>(null);
+  const [loading, setLoading]     = useState(true);
+  const [page, setPage]           = useState(1);
+  const [search, setSearch]       = useState("");
+  const [nearMe, setNearMe]       = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
 
-  // ── Ref holds the live coords — no batching issues, no stale closures ──
   const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
 
-  // ── Core fetch — reads coordsRef directly so it's always current ──────
   const fetchChefs = useCallback(async (p: number) => {
     setLoading(true);
     try {
@@ -436,7 +405,7 @@ export default function ChefsPage() {
         params.set("lng", String(coords.lng));
         params.set("radius", String(RADIUS_KM));
       }
-      const res = await fetch(`/api/public/chefs?${params}`);
+      const res  = await fetch(`/api/public/chefs?${params}`);
       const json = await res.json();
       if (json.success) {
         setChefs(json.data);
@@ -447,38 +416,31 @@ export default function ChefsPage() {
     } finally {
       setLoading(false);
     }
-  }, []); // stable — reads ref, not state
+  }, []);
 
-  // ── Re-fetch when page changes (coords already in ref) ────────────────
   useEffect(() => {
     void fetchChefs(page);
   }, [page, fetchChefs]);
 
-  // ── Near Me toggle ────────────────────────────────────────────────────
   const handleNearMe = useCallback(() => {
-    // Clear mode
     if (nearMe) {
       coordsRef.current = null;
       setNearMe(false);
       setPage(1);
-      void fetchChefs(1); // fetch without coords immediately
+      void fetchChefs(1);
       return;
     }
-
     if (!navigator.geolocation) {
       toast.error("Geolocation not supported on this device");
       return;
     }
-
     setGpsLoading(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords: { latitude, longitude } }) => {
-        // Write to ref FIRST — fetchChefs will read it synchronously
         coordsRef.current = { lat: latitude, lng: longitude };
         setGpsLoading(false);
         setNearMe(true);
         setPage(1);
-        // Call directly with fresh coords already in ref
         void fetchChefs(1);
       },
       () => {
@@ -489,15 +451,12 @@ export default function ChefsPage() {
     );
   }, [nearMe, fetchChefs]);
 
-  // ── Frontend search filter ────────────────────────────────────────────
   const filteredChefs = search.trim()
     ? chefs.filter((chef) => {
-        const q = search.toLowerCase();
+        const q       = search.toLowerCase();
         const profile = chef.chef?.profile;
         const chefName = [profile?.firstName, profile?.lastName]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
+          .filter(Boolean).join(" ").toLowerCase();
         return (
           chef.name.toLowerCase().includes(q) ||
           chefName.includes(q) ||
@@ -519,24 +478,17 @@ export default function ChefsPage() {
         aria-hidden="true"
         decoding="async"
         style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          objectPosition: "center",
-          zIndex: 0,
-          pointerEvents: "none",
+          position: "absolute", inset: 0, width: "100%", height: "100%",
+          objectFit: "cover", objectPosition: "center",
+          zIndex: 0, pointerEvents: "none",
         }}
       />
       <div
         aria-hidden="true"
         style={{
-          position: "absolute",
-          inset: 0,
+          position: "absolute", inset: 0,
           background: "rgba(0,0,0,0.18)",
-          zIndex: 1,
-          pointerEvents: "none",
+          zIndex: 1, pointerEvents: "none",
         }}
       />
 
@@ -565,14 +517,13 @@ export default function ChefsPage() {
           </p>
         </motion.div>
 
-        {/* Search + Near Me row */}
+        {/* Search + Near Me */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.38, delay: 0.08 }}
           className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 max-w-lg mx-auto w-full"
         >
-          {/* Search input */}
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
@@ -584,24 +535,30 @@ export default function ChefsPage() {
             />
           </div>
 
-          {/* Near Me button */}
+          {/* ── Near Me button ──────────────────────────────────────────────
+              FIX: In dark mode the inactive state used bg-white/90 which made
+              the text invisible against the dark card background.
+              Solution: always use an explicit text colour that works in both
+              light and dark — primary colour when inactive, white when active.
+          ─────────────────────────────────────────────────────────────────── */}
           <button
             onClick={handleNearMe}
             disabled={gpsLoading}
-            className={`flex items-center justify-center gap-2 px-4 py-2 h-10 rounded-xl text-xs font-black transition-all shadow-md border whitespace-nowrap disabled:opacity-60 flex-shrink-0 ${
+            className={`flex items-center justify-center gap-2 px-4 py-2 h-10 rounded-xl
+              text-xs font-black transition-all shadow-md border whitespace-nowrap
+              disabled:opacity-60 flex-shrink-0 ${
               nearMe
-                ? "border-transparent text-primary-foreground"
-                : "bg-white/90 backdrop-blur-sm border-white/30 text-foreground hover:bg-white"
+                ? "border-transparent text-white"           // active: white text on primary bg
+                : "bg-white/90 dark:bg-white/10 backdrop-blur-sm border-white/30 text-primary dark:text-primary hover:bg-white dark:hover:bg-white/20"
+                                                            // inactive: primary-coloured text,
+                                                            // semi-transparent bg in both modes
             }`}
             style={nearMe ? { background: "var(--primary)" } : {}}
           >
             {gpsLoading ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
             ) : (
-              <Navigation
-                className="w-3.5 h-3.5 flex-shrink-0"
-                style={nearMe ? {} : { color: "var(--primary)" }}
-              />
+              <Navigation className="w-3.5 h-3.5 flex-shrink-0" />
             )}
             <span>
               {gpsLoading ? "Locating…" : nearMe ? "Near Me ✓" : "Near Me"}
@@ -664,9 +621,7 @@ export default function ChefsPage() {
                 <p className="font-semibold text-sm sm:text-base">
                   No chefs found within {RADIUS_KM} km
                 </p>
-                <p className="text-xs mt-1 opacity-70">
-                  Try browsing all chefs instead
-                </p>
+                <p className="text-xs mt-1 opacity-70">Try browsing all chefs instead</p>
                 <button
                   onClick={handleNearMe}
                   className="mt-4 text-xs font-bold px-4 py-2 rounded-xl border border-white/30 bg-white/10 hover:bg-white/20 transition-colors text-white"
@@ -707,11 +662,7 @@ export default function ChefsPage() {
       </div>
 
       <style jsx global>{`
-        @keyframes shimmer {
-          100% {
-            transform: translateX(200%);
-          }
-        }
+        @keyframes shimmer { 100% { transform: translateX(200%); } }
       `}</style>
     </div>
   );
