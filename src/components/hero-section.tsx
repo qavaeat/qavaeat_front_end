@@ -142,7 +142,7 @@ export function HeroSection() {
               {/* CTA Buttons */}
               <div className="flex flex-wrap gap-3 mb-9">
                 <PillButton
-                  href="/meal-plans/new"
+                  href="/auth"
                   variant="primary"
                   icon={<UtensilsCrossed className="w-4 h-4" />}
                   delay={0.42}
@@ -150,7 +150,7 @@ export function HeroSection() {
                   Start Your Meal Plan
                 </PillButton>
 
-                <PillButton href="/meal-plans" variant="outline" delay={0.48}>
+                <PillButton href="/menu" variant="outline" delay={0.48}>
                   Browse Plans
                 </PillButton>
 
