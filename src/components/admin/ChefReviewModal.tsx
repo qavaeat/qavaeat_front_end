@@ -2,10 +2,25 @@
 
 import { useState, useEffect } from "react";
 import {
-  X, User, FileText, BarChart2, Zap,
-  MapPin, Globe, Phone, Mail, Link2, Award,
-  CalendarCheck, CheckCircle2, XCircle,
-  ShieldOff, RotateCcw, Loader2,
+  X,
+  User,
+  FileText,
+  BarChart2,
+  Zap,
+  MapPin,
+  Globe,
+  Phone,
+  Mail,
+  Link2,
+  Award,
+  CalendarCheck,
+  CheckCircle2,
+  XCircle,
+  ShieldOff,
+  RotateCcw,
+  Loader2,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { Business, DayOfWeek } from "@/types/admin";
 import DocumentViewer from "./DocumentViewer";
@@ -20,16 +35,29 @@ interface Props {
 }
 
 const SERVICE_ICONS: Record<string, string> = {
-  DELIVERY: "🛵", PICKUP: "🏪", DINE_IN: "🍽️",
+  DELIVERY: "🛵",
+  PICKUP: "🏪",
+  DINE_IN: "🍽️",
 };
 
 const DAY_SHORT: Record<DayOfWeek, string> = {
-  MONDAY: "Mon", TUESDAY: "Tue", WEDNESDAY: "Wed", THURSDAY: "Thu",
-  FRIDAY: "Fri", SATURDAY: "Sat", SUNDAY: "Sun",
+  MONDAY: "Mon",
+  TUESDAY: "Tue",
+  WEDNESDAY: "Wed",
+  THURSDAY: "Thu",
+  FRIDAY: "Fri",
+  SATURDAY: "Sat",
+  SUNDAY: "Sun",
 };
 
 const ALL_DAYS: DayOfWeek[] = [
-  "MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY","SATURDAY","SUNDAY",
+  "MONDAY",
+  "TUESDAY",
+  "WEDNESDAY",
+  "THURSDAY",
+  "FRIDAY",
+  "SATURDAY",
+  "SUNDAY",
 ];
 
 function getErrorMessage(err: unknown): string {
@@ -39,26 +67,36 @@ function getErrorMessage(err: unknown): string {
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string }> = {
-  PENDING:   { bg: "rgba(251,191,36,0.12)", text: "#b45309" },
-  APPROVED:  { bg: "rgba(34,197,94,0.1)",   text: "#15803d" },
-  DECLINED:  { bg: "rgba(107,114,128,0.1)", text: "#6b7280" },
-  SUSPENDED: { bg: "rgba(220,38,38,0.1)",   text: "#dc2626" },
+  PENDING: { bg: "rgba(251,191,36,0.12)", text: "#b45309" },
+  APPROVED: { bg: "rgba(34,197,94,0.1)", text: "#15803d" },
+  DECLINED: { bg: "rgba(107,114,128,0.1)", text: "#6b7280" },
+  SUSPENDED: { bg: "rgba(220,38,38,0.1)", text: "#dc2626" },
 };
 
-export default function ChefReviewModal({ business, onClose, onAction }: Props) {
-  const [tab, setTab]                               = useState<ModalTab>("overview");
-  const [reviewNote, setReviewNote]                 = useState(business.reviewNote ?? "");
-  const [suspendReason, setSuspendReason]           = useState("");
-  const [submitting, setSubmitting]                 = useState(false);
+export default function ChefReviewModal({
+  business,
+  onClose,
+  onAction,
+}: Props) {
+  const [tab, setTab] = useState<ModalTab>("overview");
+  const [reviewNote, setReviewNote] = useState(business.reviewNote ?? "");
+  const [suspendReason, setSuspendReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
+  const [deleteStage, setDeleteStage] = useState<
+    "idle" | "confirm" | "deleting"
+  >("idle");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
-  const isPending   = business.status === "PENDING";
-  const isApproved  = business.status === "APPROVED";
+  const isPending = business.status === "PENDING";
+  const isApproved = business.status === "APPROVED";
   const isSuspended = business.status === "SUSPENDED";
 
   async function handleReview(decision: "APPROVED" | "DECLINED") {
@@ -69,10 +107,12 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision, reviewNote: reviewNote || undefined }),
       });
-      const data = await res.json() as { message?: string };
+      const data = (await res.json()) as { message?: string };
       if (!res.ok) throw new Error(data.message ?? "Request failed");
       onAction(
-        decision === "APPROVED" ? `${business.name} approved.` : `Application declined.`,
+        decision === "APPROVED"
+          ? `${business.name} approved.`
+          : "Application declined.",
         "success",
       );
     } catch (err) {
@@ -90,10 +130,12 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ suspend, reason: suspendReason || undefined }),
       });
-      const data = await res.json() as { message?: string };
+      const data = (await res.json()) as { message?: string };
       if (!res.ok) throw new Error(data.message ?? "Request failed");
       onAction(
-        suspend ? `${business.name} suspended.` : `${business.name} reinstated.`,
+        suspend
+          ? `${business.name} suspended.`
+          : `${business.name} reinstated.`,
         "success",
       );
     } catch (err) {
@@ -104,94 +146,165 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
     }
   }
 
+  async function handleDelete() {
+    setDeleteStage("deleting");
+    try {
+      const res = await fetch(`/api/admin/businesses/${business.id}/delete`, {
+        method: "DELETE",
+      });
+      const data = (await res.json()) as { message?: string };
+      if (!res.ok) throw new Error(data.message ?? "Delete failed");
+      onAction(`"${business.name}" has been permanently deleted.`, "success");
+    } catch (err) {
+      onAction(getErrorMessage(err), "error");
+      setDeleteStage("confirm");
+    }
+  }
+
   const tabs: { key: ModalTab; label: string; Icon: React.ElementType }[] = [
-    { key: "overview",  label: "Overview",  Icon: User      },
-    { key: "documents", label: "Documents", Icon: FileText  },
+    { key: "overview", label: "Overview", Icon: User },
+    { key: "documents", label: "Documents", Icon: FileText },
     { key: "analytics", label: "Analytics", Icon: BarChart2 },
-    { key: "actions",   label: "Actions",   Icon: Zap       },
+    { key: "actions", label: "Actions", Icon: Zap },
   ];
 
-  const initials = business.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-  const ss       = STATUS_STYLES[business.status] ?? STATUS_STYLES["DECLINED"];
+  const initials = business.name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const ss = STATUS_STYLES[business.status] ?? STATUS_STYLES["DECLINED"];
 
-  // Build documents array — only include non-null URLs
   const documents = [
-    business.businessPermitUrl  && { label: "Business Permit",    url: business.businessPermitUrl,  type: "permit" as const },
-    business.nationalIdFrontUrl && { label: "National ID (Front)", url: business.nationalIdFrontUrl, type: "id"     as const },
-    business.nationalIdBackUrl  && { label: "National ID (Back)",  url: business.nationalIdBackUrl,  type: "id"     as const },
-    business.premiseImageUrl    && { label: "Premise Photo",       url: business.premiseImageUrl,    type: "photo"  as const },
-  ].filter(Boolean) as { label: string; url: string; type: "permit" | "id" | "photo" }[];
+    business.businessPermitUrl && {
+      label: "Business Permit",
+      url: business.businessPermitUrl,
+      type: "permit" as const,
+    },
+    business.nationalIdFrontUrl && {
+      label: "National ID (Front)",
+      url: business.nationalIdFrontUrl,
+      type: "id" as const,
+    },
+    business.nationalIdBackUrl && {
+      label: "National ID (Back)",
+      url: business.nationalIdBackUrl,
+      type: "id" as const,
+    },
+    business.premiseImageUrl && {
+      label: "Premise Photo",
+      url: business.premiseImageUrl,
+      type: "photo" as const,
+    },
+  ].filter(Boolean) as {
+    label: string;
+    url: string;
+    type: "permit" | "id" | "photo";
+  }[];
+
+  // Require typing business name to confirm delete
+  const deleteReady = deleteConfirmText.trim() === business.name.trim();
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/50 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div className="relative w-full sm:max-w-3xl max-h-[95dvh] sm:max-h-[90vh] flex flex-col bg-[var(--card)] sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden">
-
-        {/* Header */}
-        <div className="flex items-center gap-4 px-5 py-4 border-b border-[var(--border)] flex-shrink-0">
+      <div className="relative w-full sm:max-w-3xl max-h-[95dvh] sm:max-h-[90vh] flex flex-col bg-card sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden">
+        {/* ── Header ── */}
+        <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 border-b border-border flex-shrink-0">
           {business.logoUrl ? (
-            <img src={business.logoUrl} alt={business.name}
-              className="w-12 h-12 rounded-xl object-cover border border-[var(--border)]"
+            <img
+              src={business.logoUrl}
+              alt={business.name}
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover border border-border flex-shrink-0"
             />
           ) : (
-            <div className="w-12 h-12 rounded-xl bg-[var(--primary)] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-primary flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
               {initials}
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-[var(--foreground)] text-base truncate">{business.name}</h2>
+            <h2 className="font-bold text-foreground text-sm sm:text-base truncate">
+              {business.name}
+            </h2>
             <div className="flex items-center gap-2 flex-wrap mt-0.5">
-              <p className="text-xs text-[var(--muted-foreground)] truncate">{business.chef.email}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {business.chef.email}
+              </p>
               <span
-                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold"
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0"
                 style={{ background: ss.bg, color: ss.text }}
               >
                 {business.status}
               </span>
             </div>
           </div>
-          <button onClick={onClose}
-            className="p-2 rounded-lg hover:bg-[var(--muted)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors flex-shrink-0"
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
           >
             <X size={18} strokeWidth={2} />
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-[var(--border)] flex-shrink-0 overflow-x-auto">
+        {/* ── Tabs ── */}
+        <div className="flex border-b border-border flex-shrink-0 overflow-x-auto scrollbar-hide">
           {tabs.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-all ${
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 text-xs sm:text-sm font-semibold whitespace-nowrap border-b-2 transition-all ${
                 tab === t.key
-                  ? "border-[var(--primary)] text-[var(--primary)]"
-                  : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              <t.Icon size={15} strokeWidth={1.75} />
+              <t.Icon size={14} strokeWidth={1.75} />
               {t.label}
             </button>
           ))}
         </div>
 
-        {/* Content */}
+        {/* ── Content ── */}
         <div className="flex-1 overflow-y-auto">
-
           {/* Overview */}
           {tab === "overview" && (
-            <div className="p-5 space-y-6">
+            <div className="p-4 sm:p-5 space-y-6">
               <Section title="Business Details">
                 {business.description && (
-                  <p className="text-sm text-[var(--muted-foreground)] mb-4 leading-relaxed">{business.description}</p>
+                  <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                    {business.description}
+                  </p>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <InfoRow Icon={MapPin} label="Address" value={`${business.address}, ${business.city}, ${business.state}`} />
-                  <InfoRow Icon={Globe}  label="Country" value={business.country} />
-                  <InfoRow Icon={Phone}  label="Phone"   value={business.phone} />
-                  {business.email   && <InfoRow Icon={Mail}  label="Email"   value={business.email} />}
-                  {business.website && <InfoRow Icon={Link2} label="Website" value={business.website} />}
-                  <InfoRow Icon={Award} label="Experience"
+                  <InfoRow
+                    Icon={MapPin}
+                    label="Address"
+                    value={`${business.address}, ${business.city}, ${business.state}`}
+                  />
+                  <InfoRow
+                    Icon={Globe}
+                    label="Country"
+                    value={business.country}
+                  />
+                  <InfoRow Icon={Phone} label="Phone" value={business.phone} />
+                  {business.email && (
+                    <InfoRow Icon={Mail} label="Email" value={business.email} />
+                  )}
+                  {business.website && (
+                    <InfoRow
+                      Icon={Link2}
+                      label="Website"
+                      value={business.website}
+                    />
+                  )}
+                  <InfoRow
+                    Icon={Award}
+                    label="Experience"
                     value={`${business.yearsOfExperience} year${business.yearsOfExperience !== 1 ? "s" : ""}`}
                   />
                 </div>
@@ -200,7 +313,10 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
               <Section title="Services">
                 <div className="flex flex-wrap gap-2">
                   {business.services.map((s) => (
-                    <span key={s} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--muted)] text-[var(--foreground)] text-sm font-medium">
+                    <span
+                      key={s}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-muted text-foreground text-sm font-medium"
+                    >
                       {SERVICE_ICONS[s] ?? "•"} {s.replace("_", " ")}
                     </span>
                   ))}
@@ -212,11 +328,12 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
                   {ALL_DAYS.map((day) => {
                     const active = business.availability.includes(day);
                     return (
-                      <span key={day}
+                      <span
+                        key={day}
                         className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                           active
-                            ? "bg-[var(--primary)] text-white"
-                            : "bg-[var(--muted)] text-[var(--muted-foreground)]"
+                            ? "bg-primary text-white"
+                            : "bg-muted text-muted-foreground"
                         }`}
                       >
                         {DAY_SHORT[day]}
@@ -229,7 +346,10 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
               <Section title="Food Specialties">
                 <div className="flex flex-wrap gap-2">
                   {business.foodSpecialty.map((s) => (
-                    <span key={s} className="px-3 py-1.5 rounded-full bg-[var(--secondary)] text-[var(--secondary-foreground)] text-xs font-semibold">
+                    <span
+                      key={s}
+                      className="px-3 py-1.5 rounded-full bg-secondary text-secondary-foreground text-xs font-semibold"
+                    >
                       {s}
                     </span>
                   ))}
@@ -238,14 +358,23 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
 
               {business.reviewedAt && (
                 <Section title="Review History">
-                  <div className="bg-[var(--muted)] rounded-xl p-4 space-y-2">
-                    <InfoRow Icon={CalendarCheck} label="Reviewed At"
-                      value={new Date(business.reviewedAt).toLocaleString("en-KE", { timeZone: "Africa/Nairobi" })}
+                  <div className="bg-muted rounded-xl p-4 space-y-2">
+                    <InfoRow
+                      Icon={CalendarCheck}
+                      label="Reviewed At"
+                      value={new Date(business.reviewedAt).toLocaleString(
+                        "en-KE",
+                        { timeZone: "Africa/Nairobi" },
+                      )}
                     />
                     {business.reviewNote && (
                       <div className="mt-2">
-                        <p className="text-xs text-[var(--muted-foreground)] mb-1">Review Note</p>
-                        <p className="text-sm text-[var(--foreground)] italic">&ldquo;{business.reviewNote}&rdquo;</p>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Review Note
+                        </p>
+                        <p className="text-sm text-foreground italic">
+                          &ldquo;{business.reviewNote}&rdquo;
+                        </p>
                       </div>
                     )}
                   </div>
@@ -256,13 +385,19 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
 
           {/* Documents */}
           {tab === "documents" && (
-            <div className="p-5">
+            <div className="p-4 sm:p-5">
               {documents.length > 0 ? (
                 <DocumentViewer documents={documents} />
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <FileText size={32} strokeWidth={1} className="text-[var(--muted-foreground)]" />
-                  <p className="text-sm text-[var(--muted-foreground)]">No documents uploaded.</p>
+                  <FileText
+                    size={32}
+                    strokeWidth={1}
+                    className="text-muted-foreground"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    No documents uploaded.
+                  </p>
                 </div>
               )}
             </div>
@@ -270,61 +405,89 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
 
           {/* Analytics */}
           {tab === "analytics" && (
-            <div className="p-5">
-              <BusinessAnalyticsPanel businessId={business.id} status={business.status} />
+            <div className="p-4 sm:p-5">
+              <BusinessAnalyticsPanel
+                businessId={business.id}
+                status={business.status}
+              />
             </div>
           )}
 
           {/* Actions */}
           {tab === "actions" && (
-            <div className="p-5 space-y-6">
+            <div className="p-4 sm:p-5 space-y-5">
+              {/* ── Review Note ── */}
               <Section title="Review Note">
                 <textarea
                   value={reviewNote}
                   onChange={(e) => setReviewNote(e.target.value)}
                   rows={4}
                   placeholder="Add an internal note (recommended when declining)…"
-                  className="w-full px-4 py-3 text-sm bg-[var(--muted)] border border-[var(--border)] rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] resize-none"
+                  className="w-full px-4 py-3 text-sm bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                 />
               </Section>
 
+              {/* ── Application Decision (PENDING only) ── */}
               {isPending && (
                 <Section title="Application Decision">
-                  <p className="text-sm text-[var(--muted-foreground)] mb-4">
-                    Approving grants this user the <strong className="text-[var(--foreground)]">CHEF</strong> role
-                    and makes their business live. Declining keeps them as a regular user.
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Approving grants this user the{" "}
+                    <strong className="text-foreground">CHEF</strong> role and
+                    makes their business live. Declining keeps them as a regular
+                    user.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <button
-                      onClick={() => handleReview("APPROVED")} disabled={submitting}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold text-sm transition-colors disabled:opacity-60"
+                      onClick={() => handleReview("APPROVED")}
+                      disabled={submitting}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold text-sm transition-colors disabled:opacity-60"
                     >
-                      {submitting ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                      {submitting ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <CheckCircle2 size={16} />
+                      )}
                       Approve Application
                     </button>
                     <button
-                      onClick={() => handleReview("DECLINED")} disabled={submitting}
-                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl border-2 border-[var(--primary)] text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white font-semibold text-sm transition-colors disabled:opacity-60"
+                      onClick={() => handleReview("DECLINED")}
+                      disabled={submitting}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl border-2 border-primary text-primary hover:bg-primary hover:text-white font-semibold text-sm transition-colors disabled:opacity-60"
                     >
-                      {submitting ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
+                      {submitting ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <XCircle size={16} />
+                      )}
                       Decline Application
                     </button>
                   </div>
                 </Section>
               )}
 
+              {/* ── Suspend / Reinstate (APPROVED or SUSPENDED) ── */}
               {(isApproved || isSuspended) && (
-                <Section title={isSuspended ? "Reinstate Business" : "Suspend Business"}>
+                <Section
+                  title={
+                    isSuspended ? "Reinstate Business" : "Suspend Business"
+                  }
+                >
                   {isSuspended ? (
                     <div className="space-y-4">
                       <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-700">
-                        This business is currently suspended. Reinstating will make it live again.
+                        This business is currently suspended. Reinstating will
+                        make it live again.
                       </div>
                       <button
-                        onClick={() => handleSuspend(false)} disabled={submitting}
+                        onClick={() => handleSuspend(false)}
+                        disabled={submitting}
                         className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold text-sm transition-colors disabled:opacity-60"
                       >
-                        {submitting ? <Loader2 size={16} className="animate-spin" /> : <RotateCcw size={16} />}
+                        {submitting ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <RotateCcw size={16} />
+                        )}
                         Reinstate Business
                       </button>
                     </div>
@@ -332,36 +495,42 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
                     <div className="space-y-4">
                       <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700 flex items-start gap-2">
                         <ShieldOff size={16} className="mt-0.5 flex-shrink-0" />
-                        Suspending immediately hides this business and prevents new orders. The chef will be notified.
+                        Suspending immediately hides this business and prevents
+                        new orders. The chef will be notified.
                       </div>
                       {!showSuspendConfirm ? (
                         <button
                           onClick={() => setShowSuspendConfirm(true)}
-                          className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[var(--primary)] hover:bg-red-700 text-white font-semibold text-sm transition-colors"
+                          className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-primary hover:bg-red-700 text-white font-semibold text-sm transition-colors"
                         >
                           <ShieldOff size={16} /> Suspend Business
                         </button>
                       ) : (
-                        <div className="space-y-3 border border-[var(--primary)] rounded-xl p-4">
-                          <p className="text-sm font-semibold text-[var(--foreground)]">Confirm suspension</p>
+                        <div className="space-y-3 border border-primary rounded-xl p-4">
+                          <p className="text-sm font-semibold text-foreground">
+                            Confirm suspension
+                          </p>
                           <textarea
                             value={suspendReason}
                             onChange={(e) => setSuspendReason(e.target.value)}
                             rows={3}
                             placeholder="Reason for suspension (shared with the business owner)…"
-                            className="w-full px-4 py-3 text-sm bg-[var(--muted)] border border-[var(--border)] rounded-xl text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] resize-none"
+                            className="w-full px-4 py-3 text-sm bg-muted border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                           />
-                          <div className="flex gap-3">
+                          <div className="flex flex-col sm:flex-row gap-2">
                             <button
-                              onClick={() => handleSuspend(true)} disabled={submitting}
-                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white font-semibold text-sm disabled:opacity-60"
+                              onClick={() => handleSuspend(true)}
+                              disabled={submitting}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm disabled:opacity-60 transition-colors hover:bg-red-700"
                             >
-                              {submitting ? <Loader2 size={14} className="animate-spin" /> : null}
+                              {submitting ? (
+                                <Loader2 size={14} className="animate-spin" />
+                              ) : null}
                               Confirm Suspend
                             </button>
                             <button
                               onClick={() => setShowSuspendConfirm(false)}
-                              className="flex-1 px-4 py-2.5 rounded-xl border border-[var(--border)] text-[var(--foreground)] text-sm font-medium hover:bg-[var(--muted)]"
+                              className="flex-1 px-4 py-2.5 rounded-xl border border-border text-foreground text-sm font-medium hover:bg-muted transition-colors"
                             >
                               Cancel
                             </button>
@@ -373,18 +542,132 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
                 </Section>
               )}
 
+              {/* ── Quick Info ── */}
               <Section title="Quick Info">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="bg-[var(--muted)] rounded-xl p-3">
-                    <p className="text-[var(--muted-foreground)] text-xs mb-1">Chef ID</p>
-                    <p className="font-mono text-xs text-[var(--foreground)] break-all">{business.chefId}</p>
+                  <div className="bg-muted rounded-xl p-3">
+                    <p className="text-muted-foreground text-xs mb-1">
+                      Chef ID
+                    </p>
+                    <p className="font-mono text-xs text-foreground break-all">
+                      {business.chefId}
+                    </p>
                   </div>
-                  <div className="bg-[var(--muted)] rounded-xl p-3">
-                    <p className="text-[var(--muted-foreground)] text-xs mb-1">Business ID</p>
-                    <p className="font-mono text-xs text-[var(--foreground)] break-all">{business.id}</p>
+                  <div className="bg-muted rounded-xl p-3">
+                    <p className="text-muted-foreground text-xs mb-1">
+                      Business ID
+                    </p>
+                    <p className="font-mono text-xs text-foreground break-all">
+                      {business.id}
+                    </p>
                   </div>
                 </div>
               </Section>
+
+              {/* ── Danger Zone ── */}
+              <div className="rounded-2xl border border-red-200 dark:border-red-900/50 overflow-hidden">
+                {/* Zone header */}
+                <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-900/50">
+                  <AlertTriangle
+                    size={14}
+                    className="text-primary flex-shrink-0"
+                  />
+                  <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                    Danger Zone
+                  </span>
+                </div>
+
+                <div className="p-4 space-y-4 bg-card">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Permanently delete this business
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      This removes all associated data — menu items, orders,
+                      schedules, subscriptions, payouts, and documents. The
+                      chef&apos;s user account is preserved.
+                      <strong className="text-foreground">
+                        {" "}
+                        This cannot be undone.
+                      </strong>
+                    </p>
+                  </div>
+
+                  {/* Idle */}
+                  {deleteStage === "idle" && (
+                    <button
+                      onClick={() => setDeleteStage("confirm")}
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30 text-primary text-sm font-semibold hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors"
+                    >
+                      <Trash2 size={14} strokeWidth={2} />
+                      Delete Business
+                    </button>
+                  )}
+
+                  {/* Confirm */}
+                  {(deleteStage === "confirm" ||
+                    deleteStage === "deleting") && (
+                    <div className="space-y-4 rounded-xl border border-red-200 dark:border-red-900/60 bg-red-50/50 dark:bg-red-950/20 p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/40 flex items-center justify-center flex-shrink-0">
+                          <AlertTriangle size={15} className="text-primary" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-foreground">
+                            Are you absolutely sure?
+                          </p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Type{" "}
+                            <code className="px-1.5 py-0.5 rounded bg-muted font-mono text-foreground text-xs">
+                              {business.name}
+                            </code>{" "}
+                            to confirm.
+                          </p>
+                        </div>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={deleteConfirmText}
+                        onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        placeholder={business.name}
+                        disabled={deleteStage === "deleting"}
+                        className="w-full px-4 py-2.5 text-sm bg-card border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-60"
+                      />
+
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                          onClick={handleDelete}
+                          disabled={!deleteReady || deleteStage === "deleting"}
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {deleteStage === "deleting" ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              Deleting…
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 size={14} strokeWidth={2} />
+                              Delete permanently
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeleteStage("idle");
+                            setDeleteConfirmText("");
+                          }}
+                          disabled={deleteStage === "deleting"}
+                          className="flex-1 py-2.5 rounded-xl border border-border bg-card text-foreground text-sm font-medium hover:bg-muted transition-colors disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -393,22 +676,42 @@ export default function ChefReviewModal({ business, onClose, onAction }: Props) 
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">{title}</h3>
+      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">
+        {title}
+      </h3>
       {children}
     </div>
   );
 }
 
-function InfoRow({ Icon, label, value }: { Icon: React.ElementType; label: string; value: string }) {
+function InfoRow({
+  Icon,
+  label,
+  value,
+}: {
+  Icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="flex items-start gap-2.5">
-      <Icon size={14} strokeWidth={1.75} className="text-[var(--muted-foreground)] flex-shrink-0 mt-0.5" />
+      <Icon
+        size={14}
+        strokeWidth={1.75}
+        className="text-muted-foreground flex-shrink-0 mt-0.5"
+      />
       <div>
-        <p className="text-xs text-[var(--muted-foreground)]">{label}</p>
-        <p className="text-sm text-[var(--foreground)] font-medium">{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="text-sm text-foreground font-medium">{value}</p>
       </div>
     </div>
   );

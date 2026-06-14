@@ -16,9 +16,10 @@ import {
   Building2,
   Send,
   ReceiptText,
-  Filter,
   X,
   Zap,
+  CalendarDays,
+  Info,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -55,11 +56,9 @@ interface PayoutRow {
   businessName: string;
   chefEmail: string;
   logoUrl?: string;
-  // Total for ALL delivered items in the selected date window (historical display)
   grossEarnings: number;
   platformFee: number;
   todayEarnings: number;
-  // Unremitted slice only — the exact amount the Remit button will dispatch
   pendingEarnings: number;
   deliveredCount: number;
   pendingCount: number;
@@ -110,28 +109,21 @@ interface Toast {
   type: "success" | "error";
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function eatWindowToday(): { start: string; end: string } {
-  const eatNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
-  const ymd = eatNow.toISOString().slice(0, 10);
-  return {
-    start: new Date(`${ymd}T00:00:00+03:00`).toISOString(),
-    end: new Date(`${ymd}T23:59:59+03:00`).toISOString(),
-  };
+
+const EAT_OFFSET_MS = 3 * 60 * 60 * 1000; 
+
+
+function todayEATString(): string {
+  return new Date(Date.now() + EAT_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-function eatWindowRange(daysBack: number): { start: string; end: string } {
-  const eatNow = new Date(Date.now() + 3 * 60 * 60 * 1000);
-  const endYMD = eatNow.toISOString().slice(0, 10);
-  const startYMD = new Date(eatNow.getTime() - daysBack * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
-  return {
-    start: new Date(`${startYMD}T00:00:00+03:00`).toISOString(),
-    end: new Date(`${endYMD}T23:59:59+03:00`).toISOString(),
-  };
+function eatDateToUTCWindow(ymd: string): { start: string; end: string } {
+  const start = new Date(`${ymd}T00:00:00+03:00`);
+  const end = new Date(`${ymd}T23:59:59.999+03:00`);
+  return { start: start.toISOString(), end: end.toISOString() };
 }
+
 
 function formatEAT(iso: string): string {
   return new Date(iso).toLocaleTimeString("en-KE", {
@@ -150,6 +142,15 @@ function formatDateEAT(iso: string): string {
   });
 }
 
+function formatPickerLabel(ymd: string): string {
+  return new Date(`${ymd}T12:00:00+03:00`).toLocaleDateString("en-KE", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Africa/Nairobi",
+  });
+}
+
 function kes(n: number): string {
   return `KES ${n.toLocaleString("en-KE", { minimumFractionDigits: 0 })}`;
 }
@@ -157,12 +158,6 @@ function kes(n: number): string {
 function feePercent(fee: number, gross: number): number {
   return gross > 0 ? Math.round((fee / gross) * 100) : 0;
 }
-
-const RANGE_OPTIONS = [
-  { label: "Today", days: 0 },
-  { label: "Yesterday", days: 1 },
-  { label: "Last 7 d", days: 7 },
-] as const;
 
 // ─── Toast hook ───────────────────────────────────────────────────────────────
 
@@ -266,10 +261,6 @@ function StatusBadge({
 }
 
 // ─── RemitModal ───────────────────────────────────────────────────────────────
-//
-// Uses pendingEarnings (unremitted slice) as the amount to send — NOT
-// todayEarnings.  This supports multiple remits per day: a second Remit after
-// new orders arrive sends only the new amount without touching already-paid rows.
 
 function RemitModal({
   row,
@@ -283,11 +274,8 @@ function RemitModal({
   pushToast: (msg: string, type: "success" | "error") => void;
 }) {
   const [busy, setBusy] = useState(false);
-
   const amountToSend = row.pendingEarnings;
 
-  // Derive the pending gross/fee for display in the breakdown
-  // by scaling the full-window figures proportionally
   const pendingGross =
     row.todayEarnings > 0
       ? (amountToSend / row.todayEarnings) * row.grossEarnings
@@ -301,8 +289,6 @@ function RemitModal({
         ? `Bank → ${row.paymentMethod.bankName ?? "—"} / ${row.paymentMethod.accountNumber ?? "—"}`
         : "No payment method configured";
 
-  // The only real gate is whether there is something to send.
-  // remittedAt no longer blocks — new orders may have arrived since last remit.
   const canRemit = amountToSend > 0 && !!row.paymentMethod;
 
   const doRemit = async () => {
@@ -383,7 +369,6 @@ function RemitModal({
 
         {/* Body */}
         <div className="p-5 space-y-3">
-          {/* Fee breakdown — pending slice only */}
           <div
             className="rounded-xl overflow-hidden border"
             style={{
@@ -444,7 +429,6 @@ function RemitModal({
             </div>
           </div>
 
-          {/* Destination */}
           <div
             className="rounded-xl p-3 space-y-1"
             style={{
@@ -472,7 +456,6 @@ function RemitModal({
             </p>
           </div>
 
-          {/* Informational — previously remitted today (no longer a blocker) */}
           {row.remittedAt && amountToSend > 0 && (
             <div
               className="rounded-xl p-3 flex items-start gap-2"
@@ -498,7 +481,6 @@ function RemitModal({
             </div>
           )}
 
-          {/* Warning — nothing to send */}
           {amountToSend === 0 && (
             <div
               className="rounded-xl p-3 flex items-start gap-2"
@@ -519,7 +501,6 @@ function RemitModal({
             </div>
           )}
 
-          {/* Warning — no payment method */}
           {!row.paymentMethod && (
             <div
               className="rounded-xl p-3 flex items-start gap-2"
@@ -599,7 +580,6 @@ function OrdersDrawer({
           borderLeft: "1px solid var(--border)",
         }}
       >
-        {/* Header */}
         <div
           className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"
           style={{ borderColor: "var(--border)" }}
@@ -628,7 +608,6 @@ function OrdersDrawer({
           </button>
         </div>
 
-        {/* List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {row.orders.length === 0 ? (
             <div className="text-center py-16">
@@ -648,7 +627,6 @@ function OrdersDrawer({
                   : order.status === "CANCELLED" || order.status === "FAILED"
                     ? "var(--primary)"
                     : "var(--muted-foreground)";
-
               const sourceBadge =
                 order.source === "schedule"
                   ? "SCHEDULE"
@@ -662,7 +640,6 @@ function OrdersDrawer({
                   className="rounded-xl border overflow-hidden"
                   style={{ borderColor: "var(--border)" }}
                 >
-                  {/* Row header */}
                   <div
                     className="flex items-center justify-between px-3 py-2.5"
                     style={{ background: "var(--muted)" }}
@@ -705,8 +682,6 @@ function OrdersDrawer({
                       </span>
                     </div>
                   </div>
-
-                  {/* Items */}
                   <div
                     className="divide-y"
                     style={{ borderColor: "var(--border)" }}
@@ -739,8 +714,6 @@ function OrdersDrawer({
                       </div>
                     ))}
                   </div>
-
-                  {/* Timestamp */}
                   <div
                     className="px-3 py-2 flex justify-end"
                     style={{ borderTop: "1px solid var(--border)" }}
@@ -766,18 +739,6 @@ function OrdersDrawer({
 }
 
 // ─── PayoutCard ───────────────────────────────────────────────────────────────
-//
-// Remit button logic:
-//   - Disabled only when pendingEarnings === 0 (nothing to send) or no payment method.
-//   - alreadyRemitted alone does NOT disable the button — new orders may have
-//     arrived since the last remittance, and the service handles that correctly.
-//
-// Label states:
-//   "Sent"         — remitted earlier today, no new pending orders
-//   "Remit again"  — remitted earlier today, new unremitted orders exist
-//   "Remit"        — not yet remitted today, orders pending
-//   "Nothing pending" — delivered orders all remitted, nothing new
-//   "No payout method" — chef hasn't set up payment
 
 function PayoutCard({
   row,
@@ -785,22 +746,26 @@ function PayoutCard({
   onToggleStatus,
   onViewOrders,
   toggling,
+  isFuture,
 }: {
   row: PayoutRow;
   onRemit: (row: PayoutRow) => void;
   onToggleStatus: (row: PayoutRow) => void;
   onViewOrders: (row: PayoutRow) => void;
   toggling: boolean;
+  isFuture: boolean;
 }) {
   const alreadyRemitted = !!row.remittedAt;
   const noMethod = !row.paymentMethod;
   const noPending = row.pendingEarnings === 0;
 
-  // noPending is the only functional gate; alreadyRemitted is cosmetic only
-  const isDisabled = noMethod || noPending;
+  // Future dates: action buttons are always disabled — money hasn't been
+  // collected yet. The card is read-only / preview only.
+  const isDisabled = isFuture || noMethod || noPending;
 
-  const remitLabel =
-    noPending && alreadyRemitted
+  const remitLabel = isFuture
+    ? "Not yet due"
+    : noPending && alreadyRemitted
       ? "Sent"
       : noPending
         ? "Nothing pending"
@@ -810,8 +775,9 @@ function PayoutCard({
             ? "Remit again"
             : "Remit";
 
-  const remitHint =
-    noPending && alreadyRemitted
+  const remitHint = isFuture
+    ? "This date is in the future — payouts cannot be sent until the day arrives"
+    : noPending && alreadyRemitted
       ? "All delivered meals have been remitted"
       : noPending
         ? "All delivered meals already remitted"
@@ -821,13 +787,13 @@ function PayoutCard({
             ? "New delivered orders arrived since last remittance"
             : "Send via IntaSend";
 
-  const remitBg =
-    alreadyRemitted && noPending
+  const remitBg = isFuture
+    ? "var(--muted)"
+    : alreadyRemitted && noPending
       ? "var(--muted)"
       : isDisabled
         ? "color-mix(in srgb, var(--primary) 30%, var(--muted))"
         : "var(--primary)";
-
   const remitFg = isDisabled ? "var(--muted-foreground)" : "white";
 
   return (
@@ -871,9 +837,8 @@ function PayoutCard({
         <StatusBadge status={row.payoutStatus} remittedAt={row.remittedAt} />
       </div>
 
-      {/* Earnings strip */}
+      {/* Earnings */}
       <div className="border-y" style={{ borderColor: "var(--border)" }}>
-        {/* Full-window totals — accurate even for historical date ranges */}
         <div className="px-3 py-2.5 space-y-1">
           <div className="flex items-center justify-between text-[10px]">
             <span style={{ color: "var(--muted-foreground)" }}>
@@ -902,8 +867,6 @@ function PayoutCard({
               {kes(row.todayEarnings)}
             </span>
           </div>
-
-          {/* Pending line — only shown when there is something outstanding */}
           {row.pendingEarnings > 0 && (
             <div
               className="flex items-center justify-between text-[10px] pt-0.5 border-t"
@@ -921,8 +884,6 @@ function PayoutCard({
             </div>
           )}
         </div>
-
-        {/* Counts */}
         <div
           className="grid grid-cols-2 border-t"
           style={{ borderColor: "var(--border)" }}
@@ -958,7 +919,6 @@ function PayoutCard({
         </div>
       </div>
 
-      {/* IntaSend transfer ref */}
       {row.transferRef && (
         <div
           className="px-4 py-2 flex items-center gap-1.5 border-b"
@@ -977,7 +937,6 @@ function PayoutCard({
         </div>
       )}
 
-      {/* Payment method + orders button */}
       <div
         className="px-4 py-2.5 flex items-center justify-between gap-2 border-b"
         style={{ borderColor: "var(--border)" }}
@@ -1002,13 +961,12 @@ function PayoutCard({
         </button>
       </div>
 
-      {/* Actions */}
       <div className="px-4 py-3 flex items-center gap-2">
-        {/* Toggle paid / unpaid status */}
         <button
           onClick={() => onToggleStatus(row)}
-          disabled={toggling}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border transition-colors disabled:opacity-50"
+          disabled={toggling || isFuture}
+          title={isFuture ? "Cannot mark paid for a future date" : undefined}
+          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
             borderColor:
               row.payoutStatus === "PAID"
@@ -1035,7 +993,6 @@ function PayoutCard({
           )}
         </button>
 
-        {/* Remit button */}
         <button
           onClick={() => !isDisabled && onRemit(row)}
           disabled={isDisabled}
@@ -1131,7 +1088,6 @@ function MissedCard({ instance }: { instance: MissedInstance }) {
           MISSED
         </span>
       </div>
-
       <div className="px-4 py-3 space-y-1.5">
         {rows.map(([k, v]) => (
           <div
@@ -1211,9 +1167,103 @@ function PaginationBar({
   );
 }
 
-// ─── ChefPayoutsTable (main component) ───────────────────────────────────────
+// ─── DatePicker ───────────────────────────────────────────────────────────────
+//
+// Uses a <label> wrapping the native <input type="date"> so that clicking
+// *anywhere* on the styled pill reliably opens the browser calendar on the
+// first click — no showPicker() call needed, no user-gesture timing issues.
+//
+// No `max` attribute: future dates are intentionally allowed so the admin
+// can preview upcoming scheduled payouts before they are due.
+//
+// The value is always a YYYY-MM-DD string in EAT. UTC conversion happens
+// in eatDateToUTCWindow() at fetch time, never here.
+
+function DatePicker({
+  value,
+  onChange,
+  isFuture,
+}: {
+  value: string;
+  onChange: (ymd: string) => void;
+  isFuture: boolean;
+}) {
+  const today = todayEATString();
+  const borderColor = isFuture
+    ? "color-mix(in srgb, var(--secondary) 60%, transparent)"
+    : "var(--border)";
+  const hoverBorderColor = isFuture
+    ? "var(--secondary-foreground)"
+    : "var(--primary)";
+  return (
+    <div className="relative inline-flex">
+      <style>{`
+        .qav-date-input::-webkit-calendar-picker-indicator {
+          opacity: 0;
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          cursor: pointer;
+        }
+        .qav-date-input::-webkit-datetime-edit { opacity: 0; }
+        .qav-date-input::-webkit-datetime-edit-fields-wrapper { opacity: 0; }
+        .qav-date-input::-webkit-inner-spin-button { display: none; }
+        .qav-date-input::-moz-focus-inner { border: 0; }
+      `}</style>
+
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => {
+          if (e.target.value) onChange(e.target.value);
+        }}
+        className="qav-date-input rounded-xl border transition-colors cursor-pointer outline-none"
+        style={{
+          background: "var(--card)",
+          borderColor,
+          colorScheme: "light dark",
+          minWidth: "9rem",
+          height: "2.25rem",
+          padding: "0 0.75rem",
+          color: "transparent",
+          WebkitTextFillColor: "transparent",
+        }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = hoverBorderColor)}
+        onBlur={(e) => (e.currentTarget.style.borderColor = borderColor)}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.borderColor = hoverBorderColor)
+        }
+        onMouseLeave={(e) => (e.currentTarget.style.borderColor = borderColor)}
+        aria-label="Select payout date"
+      />
+
+      {/* Our own label — pointer-events:none so clicks fall through to input */}
+      <div className="absolute inset-0 flex items-center gap-2 px-3 pointer-events-none select-none">
+        <CalendarDays
+          className="w-3.5 h-3.5 flex-shrink-0"
+          style={{
+            color: isFuture ? "var(--secondary-foreground)" : "var(--primary)",
+          }}
+        />
+        <span
+          className="text-xs font-bold whitespace-nowrap"
+          style={{ color: "var(--foreground)" }}
+        >
+          {value === today ? "Today" : formatPickerLabel(value)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── ChefPayoutsTable (main) ──────────────────────────────────────────────────
 
 export default function ChefPayoutsTable() {
+  // selectedDate is always a YYYY-MM-DD string in EAT.
+  // It is the single source of truth for what date window is queried.
+  const [selectedDate, setSelectedDate] = useState<string>(todayEATString);
+
   const [rows, setRows] = useState<PayoutRow[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [missed, setMissed] = useState<MissedInstance[]>([]);
@@ -1223,7 +1273,6 @@ export default function ChefPayoutsTable() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [missedPage, setMissedPage] = useState(1);
-  const [rangeIdx, setRangeIdx] = useState(0);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"payouts" | "missed">("payouts");
   const [remitTarget, setRemitTarget] = useState<PayoutRow | null>(null);
@@ -1232,7 +1281,13 @@ export default function ChefPayoutsTable() {
 
   const { toasts, push: pushToast } = useToasts();
 
-  // ── Summary — page-scoped totals for the selected date window ─────────────
+  // Reset to page 1 whenever the selected date changes
+  useEffect(() => {
+    setPage(1);
+  }, [selectedDate]);
+
+  // ── Summary totals (page-scoped) ──────────────────────────────────────────
+
   const summary = useMemo(
     () => ({
       totalGross: rows.reduce((s, r) => s + r.grossEarnings, 0),
@@ -1253,15 +1308,11 @@ export default function ChefPayoutsTable() {
     );
   }, [rows, search]);
 
-  // ── Data fetching ──────────────────────────────────────────────────────────
-
   const fetchPayouts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const range = RANGE_OPTIONS[rangeIdx];
-      const { start, end } =
-        range.days === 0 ? eatWindowToday() : eatWindowRange(range.days);
+      const { start, end } = eatDateToUTCWindow(selectedDate);
       const qs = new URLSearchParams({
         start,
         end,
@@ -1284,7 +1335,7 @@ export default function ChefPayoutsTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, rangeIdx]);
+  }, [selectedDate, page]);
 
   const fetchMissed = useCallback(async () => {
     setLoadingMissed(true);
@@ -1298,7 +1349,7 @@ export default function ChefPayoutsTable() {
         setMissedMeta(json.meta ?? null);
       }
     } catch {
-      // Non-fatal — disputes tab failing shouldn't break the payouts tab
+      // Non-fatal
     } finally {
       setLoadingMissed(false);
     }
@@ -1311,13 +1362,10 @@ export default function ChefPayoutsTable() {
     if (activeTab === "missed") void fetchMissed();
   }, [activeTab, fetchMissed]);
   useEffect(() => {
-    setPage(1);
-  }, [rangeIdx]);
-  useEffect(() => {
     setMissedPage(1);
   }, [activeTab]);
 
-  // ── Toggle paid / unpaid ───────────────────────────────────────────────────
+  // ── Toggle paid / unpaid ──────────────────────────────────────────────────
 
   const toggleStatus = async (row: PayoutRow) => {
     setToggling(row.businessId);
@@ -1348,8 +1396,6 @@ export default function ChefPayoutsTable() {
     }
   };
 
-  // After a successful remit: mark paid, update remittedAt, zero pendingEarnings.
-  // If new orders arrive later the admin refreshes to see the new pendingEarnings.
   const onRemitSuccess = (businessId: string) => {
     setRows((prev) =>
       prev.map((r) =>
@@ -1365,11 +1411,11 @@ export default function ChefPayoutsTable() {
     );
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Summary strip — reflects current page in the selected date range */}
+      {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {
@@ -1445,13 +1491,13 @@ export default function ChefPayoutsTable() {
         ))}
       </div>
 
-      {/* ── Payouts tab ─────────────────────────────────────────────────────── */}
+      {/* ── Payouts tab ───────────────────────────────────────────────────── */}
       {activeTab === "payouts" && (
         <div className="space-y-4">
           {/* Toolbar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 flex-wrap">
             {/* Search */}
-            <div className="relative flex-1 max-w-xs">
+            <div className="relative flex-1 min-w-0 max-w-xs">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
                 style={{ color: "var(--muted-foreground)" }}
@@ -1475,29 +1521,29 @@ export default function ChefPayoutsTable() {
               />
             </div>
 
-            {/* Date range pills */}
-            <div className="flex items-center gap-1 flex-wrap">
-              <Filter
-                className="w-3.5 h-3.5 flex-shrink-0"
-                style={{ color: "var(--muted-foreground)" }}
-              />
-              {RANGE_OPTIONS.map((opt, i) => (
-                <button
-                  key={opt.label}
-                  onClick={() => setRangeIdx(i)}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors whitespace-nowrap"
-                  style={{
-                    background:
-                      i === rangeIdx ? "var(--primary)" : "var(--card)",
-                    borderColor:
-                      i === rangeIdx ? "var(--primary)" : "var(--border)",
-                    color: i === rangeIdx ? "white" : "var(--foreground)",
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+            {/* Date picker */}
+            <DatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+              isFuture={selectedDate > todayEATString()}
+            />
+
+            {/* Jump to today — shown for any non-today date, label adapts */}
+            {selectedDate !== todayEATString() && (
+              <button
+                onClick={() => setSelectedDate(todayEATString())}
+                className="px-3 py-2 rounded-xl text-xs font-bold border transition-colors whitespace-nowrap"
+                style={{
+                  background:
+                    "color-mix(in srgb, var(--primary) 8%, transparent)",
+                  borderColor:
+                    "color-mix(in srgb, var(--primary) 30%, transparent)",
+                  color: "var(--primary)",
+                }}
+              >
+                {selectedDate > todayEATString() ? "← Today" : "→ Today"}
+              </button>
+            )}
 
             {/* Refresh */}
             <button
@@ -1516,6 +1562,127 @@ export default function ChefPayoutsTable() {
               <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
+
+          {/* ── Contextual UX banner — changes based on past / today / future ── */}
+          {(() => {
+            const today = todayEATString();
+            const isFuture = selectedDate > today;
+            const isPast = selectedDate < today;
+            const dateLabel = formatPickerLabel(selectedDate);
+
+            if (isFuture)
+              return (
+                <div
+                  className="rounded-2xl border p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                  style={{
+                    background:
+                      "color-mix(in srgb, var(--secondary) 10%, transparent)",
+                    borderColor:
+                      "color-mix(in srgb, var(--secondary-foreground) 25%, transparent)",
+                  }}
+                >
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Info
+                      className="w-4 h-4 flex-shrink-0"
+                      style={{ color: "var(--secondary-foreground)" }}
+                    />
+                    <p
+                      className="text-xs font-black"
+                      style={{ color: "var(--secondary-foreground)" }}
+                    >
+                      Preview — {dateLabel}
+                    </p>
+                  </div>
+                  <p
+                    className="text-[11px] leading-relaxed"
+                    style={{ color: "var(--secondary-foreground)" }}
+                  >
+                    You are viewing <strong>scheduled future payouts</strong>.
+                    These are meals already booked and paid for by customers,
+                    due for delivery on this date. Amounts shown are projected —
+                    actual remittance is only possible on or after the delivery
+                    date.
+                    <strong> Remit and Mark Paid buttons are disabled.</strong>
+                  </p>
+                </div>
+              );
+
+            if (isPast)
+              return (
+                <div
+                  className="rounded-2xl border p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                  style={{
+                    background:
+                      "color-mix(in srgb, var(--muted) 60%, transparent)",
+                    borderColor: "var(--border)",
+                  }}
+                >
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <CalendarDays
+                      className="w-4 h-4 flex-shrink-0"
+                      style={{ color: "var(--muted-foreground)" }}
+                    />
+                    <p
+                      className="text-xs font-black"
+                      style={{ color: "var(--foreground)" }}
+                    >
+                      Historical — {dateLabel}
+                    </p>
+                  </div>
+                  <p
+                    className="text-[11px] leading-relaxed"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    Showing delivered meals and payout records for a past date.
+                    Any unpaid amounts can still be remitted if the chef has a
+                    valid payment method configured. Use the date picker to jump
+                    between dates or{" "}
+                    <button
+                      onClick={() => setSelectedDate(today)}
+                      className="underline font-bold"
+                      style={{ color: "var(--primary)" }}
+                    >
+                      return to today
+                    </button>
+                    .
+                  </p>
+                </div>
+              );
+
+            // today
+            return (
+              <div
+                className="rounded-2xl border p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                style={{
+                  background:
+                    "color-mix(in srgb, var(--chart-3) 6%, transparent)",
+                  borderColor:
+                    "color-mix(in srgb, var(--chart-3) 25%, transparent)",
+                }}
+              >
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <CheckCircle2
+                    className="w-4 h-4 flex-shrink-0"
+                    style={{ color: "var(--chart-3)" }}
+                  />
+                  <p
+                    className="text-xs font-black"
+                    style={{ color: "var(--foreground)" }}
+                  >
+                    Today — {dateLabel} · EAT
+                  </p>
+                </div>
+                <p
+                  className="text-[11px] leading-relaxed"
+                  style={{ color: "var(--muted-foreground)" }}
+                >
+                  Live view of today&apos;s payouts. Remit any chef with a
+                  pending balance now. Use the date picker to review past
+                  payments or preview what is scheduled for future dates.
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Skeleton */}
           {loading && (
@@ -1577,7 +1744,7 @@ export default function ChefPayoutsTable() {
               >
                 {search
                   ? "No businesses match your search."
-                  : "No paid orders in this date range."}
+                  : `No paid orders on ${formatPickerLabel(selectedDate)}.`}
               </p>
             </div>
           )}
@@ -1593,6 +1760,7 @@ export default function ChefPayoutsTable() {
                   onToggleStatus={(r) => void toggleStatus(r)}
                   onViewOrders={setOrderTarget}
                   toggling={toggling === row.businessId}
+                  isFuture={selectedDate > todayEATString()}
                 />
               ))}
             </div>
@@ -1609,7 +1777,7 @@ export default function ChefPayoutsTable() {
         </div>
       )}
 
-      {/* ── Disputes tab ────────────────────────────────────────────────────── */}
+      {/* ── Disputes tab ──────────────────────────────────────────────────── */}
       {activeTab === "missed" && (
         <div className="space-y-4">
           <div
